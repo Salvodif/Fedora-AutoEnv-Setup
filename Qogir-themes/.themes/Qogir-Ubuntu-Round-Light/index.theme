@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=Qogir-Ubuntu-Round-Light
+Comment=An Clean Gtk+ theme based on Flat Design
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=Qogir-Ubuntu-Round-Light
+MetacityTheme=Qogir-Ubuntu-Round-Light
+IconTheme=Qogir-Ubuntu
+CursorTheme=Adwaita
+ButtonLayout=menu:minimize,maximize,close
