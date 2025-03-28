@@ -1,0 +1,8 @@
+skip_file = "*.mp4"
+skip_file = "*.avi"
+skip_file = "*.mpg"
+skip_file = "*.jpg"
+skip_file = "*.png"
+
+skip_dir = "Videos"
+skip_dir = "Documents/My Games"
