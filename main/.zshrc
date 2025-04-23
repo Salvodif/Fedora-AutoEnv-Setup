@@ -118,12 +118,9 @@ source $ZSH/oh-my-zsh.sh
 alias df="dust"
 alias top="btop"
 alias cat="bat"
-alias pdfLoad="fd . ~/OneDrive/DBCalibre -t f -e pdf -0 | fzf --read0 --print0 | xargs -0 -n1 masterpdfeditor5"
 
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.cargo/bin:$PATH"
-
-. "$HOME/.atuin/bin/env"
 
 eval "$(zoxide init --cmd cd zsh)"
 eval "$(atuin init zsh)"
