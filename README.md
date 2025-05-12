@@ -131,8 +131,6 @@ Configuration for the GNU nano text editor.
 Currently, installation is manual via symbolic links. For more complex setups or managing dotfiles across multiple machines, consider using tools like:
 
 *   [GNU Stow](https://www.gnu.org/software/stow/)
-*   [Chezmoi](https://www.chezmoi.io/)
-*   A custom shell script
 
 ## Customization
 
