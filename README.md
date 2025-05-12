@@ -61,7 +61,7 @@ My Zsh configuration aims for productivity and a pleasant user experience. It's 
         ```
     *   **you-should-use:**
         ```bash
-        git clone https://github.com/MichaelHoste/zsh-you-should-use.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/you-should-use
+        git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/you-should-use
         ```
     *   **zsh-eza:** (Assumes `eza` is installed)
         ```bash
