@@ -81,7 +81,7 @@ plugins=(git
   	zsh-autosuggestions
 	zsh-syntax-highlighting
 	you-should-use
-	zsh-eza
+	# zsh-eza
 	fzf-tab)
 
 source $ZSH/oh-my-zsh.sh
@@ -121,6 +121,7 @@ alias cat="bat"
 
 export PATH="$HOME/.local/bin:$PATH"
 export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.atuin/bin:$PATH"
 
 eval "$(zoxide init --cmd cd zsh)"
 eval "$(atuin init zsh)"
@@ -136,3 +137,5 @@ PERL_MB_OPT="--install_base \"/home/blackpraedicator/perl5\""; export PERL_MB_OP
 PERL_MM_OPT="INSTALL_BASE=/home/blackpraedicator/perl5"; export PERL_MM_OPT;
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+. "$HOME/.atuin/bin/env"
