@@ -99,10 +99,10 @@ Configuration for the GNU nano text editor.
 ## Installation
 
 1.  **Clone the repository:**
-        ```bash
-        git clone https://github.com/Salvodif/dotfiles.git ~/.dotfiles
-        cd ~/.dotfiles
-        ```
+   ```bash
+   git clone https://github.com/Salvodif/dotfiles.git ~/.dotfiles
+   cd ~/.dotfiles
+   ```
 
 2.  **Install Zsh configuration:**
     *   First, ensure all prerequisites listed above for Zsh are installed (Oh My Zsh, plugins, external tools).
