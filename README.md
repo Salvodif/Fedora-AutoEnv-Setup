@@ -72,13 +72,13 @@ My Zsh configuration aims for productivity and a pleasant user experience. It's 
         git clone https://github.com/Aloxaf/fzf-tab ~/.oh-my-zsh/custom/plugins/fzf-tab
         ```
 5.  **External Tools to Install:**
-    *   `eza`: (e.g., `sudo apt install eza`, `brew install eza`, or from source)
-    *   `dust`: (e.g., `cargo install dust`)
-    *   `btop`: (e.g., `sudo apt install btop`, `brew install btop`, or from source)
-    *   `bat`: (e.g., `sudo apt install bat`, `brew install bat`, or from source. Often needs to be aliased as `batcat` on Debian/Ubuntu, then `alias cat=batcat`)
-    *   `fzf`: (e.g., `sudo apt install fzf`, `brew install fzf`)
+    *   `eza`: (e.g., `cargo install eza`, or from source)
+    *   `dust`: (e.g., `cargo install du-dust`)
+    *   `btop`: (e.g., `sudo dnf install btop`, or from source)
+    *   `bat`: (e.g., `sudo dnf install bat`, or from source. Often needs to be aliased as `batcat` on Debian/Ubuntu, then `alias cat=batcat`)
+    *   `fzf`: (e.g., `sudo dnf install fzf`)
     *   `zoxide`: (Installation instructions: [https://github.com/ajeetdsouza/zoxide#installation](https://github.com/ajeetdsouza/zoxide#installation))
-    *   `atuin`: (Installation instructions: [https://atuin.sh/docs/install](https://atuin.sh/docs/install))
+    *   `atuin`: (e.g., `curl --proto '=https' --tlsv1.2 -LsSf https://setup.atuin.sh | sh`) (Installation instructions: [https://atuin.sh/]([https://atuin.sh/))
     *   (Optional) `perl` and `cpanm` if you intend to use the Perl local library setup.
 
 ### 2. Nano (`nano/.nanorc`)
