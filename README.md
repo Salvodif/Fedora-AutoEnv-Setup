@@ -69,9 +69,7 @@ My Zsh configuration aims for productivity and a pleasant user experience. It's 
         ```
     *   **fzf-tab:** (Your config sources it directly, ensure it's present)
         ```bash
-        # If not already there, clone it:
-        # mkdir -p ~/.oh-my-zsh/custom/plugins
-        # git clone https://github.com/Aloxaf/fzf-tab ~/.oh-my-zsh/custom/plugins/fzf-tab
+        git clone https://github.com/Aloxaf/fzf-tab ~/.oh-my-zsh/custom/plugins/fzf-tab
         ```
 5.  **External Tools to Install:**
     *   `eza`: (e.g., `sudo apt install eza`, `brew install eza`, or from source)
