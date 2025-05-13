@@ -2,7 +2,8 @@ import shutil
 import subprocess # For CalledProcessError, TimeoutExpired
 
 from . import shared_state
-from .utils import run_command
+from . import utils as command_utils
+
 from .package_manager import install_dnf_packages # Specific import
 
 def manage_gnome_extensions():
@@ -38,7 +39,7 @@ def manage_gnome_extensions():
         name, uuid, dnf_pkg = ext_cfg["name"], ext_cfg["uuid"], ext_cfg.get("dnf_package")
         shared_state.log.info(f"Processing: [cyan]{name}[/] (UUID: {uuid})")
         try:
-            info_res = run_command(["gnome-extensions","info",uuid],as_user=shared_state.TARGET_USER,capture_output=True,text=True,check=False)
+            info_res = command_utils.run_command(["gnome-extensions","info",uuid],as_user=shared_state.TARGET_USER,capture_output=True,text=True,check=False)
             state = "NOT FOUND"
             if info_res.returncode == 0 and info_res.stdout:
                 state = next((l.split(":",1)[1].strip() for l in info_res.stdout.splitlines() if l.startswith("State:")), "UNKNOWN")
@@ -48,7 +49,7 @@ def manage_gnome_extensions():
             elif state in ["DISABLED", "INITIALIZED", "ERROR", "DOWNLOAD_NEEDED", "OUTDATED"]:
                 shared_state.log.info(f"Attempting to enable '[cyan]{name}[/]' (state: {state})...")
                 with shared_state.console.status(f"[green]Enabling {name}...[/]"):
-                    run_command(["gnome-extensions","enable",uuid],as_user=shared_state.TARGET_USER,check=True)
+                    command_utils.run_command(["gnome-extensions","enable",uuid],as_user=shared_state.TARGET_USER,check=True)
                 shared_state.log.info(f":arrow_up_small: '[cyan]{name}[/]' enabled."); enabled_new = True
             elif state == "NOT FOUND":
                 shared_state.log.warning(f"[yellow]Ext '{name}' (UUID: {uuid}) not found via `gnome-extensions info`. DNF pkg '{dnf_pkg or 'N/A'}' might be missing/incompatible/failed.[/]")
@@ -66,7 +67,7 @@ def manage_gnome_extensions():
 
     try:
         shared_state.log.info("Currently enabled GNOME extensions for "+shared_state.TARGET_USER+":")
-        res = run_command(["gnome-extensions","list","--enabled"],as_user=shared_state.TARGET_USER,capture_output=True,check=True,text=True)
+        res = command_utils.run_command(["gnome-extensions","list","--enabled"],as_user=shared_state.TARGET_USER,capture_output=True,check=True,text=True)
         if res.stdout.strip(): shared_state.console.print(res.stdout.strip())
         else: shared_state.log.info("No enabled extensions found or session inactive for command.")
     except Exception as e_list: shared_state.log.warning(f"Could not list enabled GNOME extensions: {e_list}")

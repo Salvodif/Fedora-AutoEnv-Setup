@@ -24,20 +24,25 @@ def _ensure_rich_library() -> bool:
         rich_module = importlib.import_module("rich")
         current_version = getattr(rich_module, "__version__", "unknown")
         print(f"Python 'rich' library found (v{current_version}). Checking for updates...", flush=True)
+        
+        # CORREZIONE: Definisci force_upgrade_check qui
+        force_upgrade_check = current_version == "unknown" 
+
         try:
             pip_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "rich"]
             pip_process = subprocess.run(pip_cmd, check=True, capture_output=True, text=True, timeout=60)
+            
             was_upgraded_or_installed = "Successfully installed rich" in pip_process.stdout or \
                                         ( "Requirement already satisfied" not in pip_process.stdout and \
                                           "already up-to-date" not in pip_process.stdout )
 
+            # Ora force_upgrade_check è definito quando viene usato qui
             if was_upgraded_or_installed or force_upgrade_check:
                  print("Python 'rich' library may have been updated or version was unknown. Reloading...", flush=True)
-                 # Svuota i vecchi moduli rich da sys.modules per forzare una ricarica pulita
                  for k in list(sys.modules.keys()):
                      if k.startswith('rich'):
                          del sys.modules[k]
-                 rich_module = importlib.import_module("rich") # Ricarica fresca
+                 rich_module = importlib.import_module("rich")
                  new_version = getattr(rich_module, "__version__", "still unknown")
                  print(f"Python 'rich' library reloaded (new version {new_version}).", flush=True)
                  if new_version == "still unknown":

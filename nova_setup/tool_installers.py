@@ -2,7 +2,8 @@ import shutil
 import subprocess # For CalledProcessError, FileNotFoundError, TimeoutExpired
 
 from . import shared_state
-from .utils import run_command, check_command_exists
+from . import utils as command_utils
+
 
 def install_cargo_tools():
     shared_state.log.info(f"Installing Cargo tools: [cyan]{', '.join(shared_state.CARGO_TOOLS)}[/]...")
@@ -16,7 +17,7 @@ def install_cargo_tools():
     shared_state.log.info(f"Using cargo: [blue]{effective_cargo_cmd}[/]")
     for tool_name in shared_state.CARGO_TOOLS:
         try:
-            list_res = run_command([effective_cargo_cmd,"install","--list"],as_user=shared_state.TARGET_USER,capture_output=True,text=True,check=False)
+            list_res = command_utils.run_command([effective_cargo_cmd,"install","--list"],as_user=shared_state.TARGET_USER,capture_output=True,text=True,check=False)
             if list_res.returncode == 0 and f"{tool_name} v" in list_res.stdout:
                 shared_state.log.warning(f"Cargo tool '[cyan]{tool_name}[/]' already installed. Skipping."); continue
         except Exception: shared_state.log.debug(f"Cargo list check failed for {tool_name}")
@@ -24,7 +25,7 @@ def install_cargo_tools():
         shared_state.log.info(f"Installing '[cyan]{tool_name}[/]' with cargo...")
         with shared_state.console.status(f"[green]Installing {tool_name} with cargo...[/]"):
             try:
-                run_command([effective_cargo_cmd, "install", tool_name], as_user=shared_state.TARGET_USER)
+                command_utils.run_command([effective_cargo_cmd, "install", tool_name], as_user=shared_state.TARGET_USER)
                 shared_state.log.info(f":crates: Cargo tool '[cyan]{tool_name}[/]' installed.")
             except Exception as e_cargo:
                 shared_state.log.error(f"[bold red]Failed Cargo tool install '{tool_name}': {e_cargo}[/]")
@@ -36,9 +37,9 @@ def install_scripted_tools():
         name, check_cmd_parts, url, method = tool_info["name"], tool_info["check_command"].split(), tool_info["url"], tool_info["method"]
         shared_state.log.info(f"Scripted tool: '[cyan]{name}[/]'...")
         
-        if check_command_exists(check_cmd_parts, as_user=shared_state.TARGET_USER):
+        if command_utils.check_command_exists(check_cmd_parts, as_user=shared_state.TARGET_USER):
             try:
-                run_command(check_cmd_parts, as_user=shared_state.TARGET_USER, capture_output=True, check=True) # Version check
+                command_utils.run_command(check_cmd_parts, as_user=shared_state.TARGET_USER, capture_output=True, check=True) # Version check
                 shared_state.log.info(f"'[cyan]{name}[/]' already installed & version OK. Skipping."); continue
             except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
                 shared_state.log.debug(f"'{name}' found, but version check failed/timed out. Reinstalling.")
@@ -50,8 +51,8 @@ def install_scripted_tools():
         cmd_str = f"curl -fsSL {url} | {method}"
         with shared_state.console.status(f"[green]Installing {name}...[/]", spinner="arrow3"):
             try:
-                run_command(cmd_str, as_user=shared_state.TARGET_USER, shell=True, check=True)
-                if check_command_exists(check_cmd_parts, as_user=shared_state.TARGET_USER):
+                command_utils.run_command(cmd_str, as_user=shared_state.TARGET_USER, shell=True, check=True)
+                if command_utils.check_command_exists(check_cmd_parts, as_user=shared_state.TARGET_USER):
                     shared_state.log.info(f":white_check_mark: '[cyan]{name}[/]' installed/updated.")
                     if name == "zoxide":
                         _ensure_zoxide_in_zshrc()

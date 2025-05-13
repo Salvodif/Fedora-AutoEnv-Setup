@@ -1,8 +1,7 @@
-import shutil
-import subprocess # For CalledProcessError, FileNotFoundError, TimeoutExpired
 
 from . import shared_state
-from .utils import run_command, check_command_exists
+
+from . import utils as command_utils
 
 def perform_post_install_checks():
     Console, Panel, Text, _, _, _, _, _, _ = shared_state.get_rich_components()
@@ -15,7 +14,7 @@ def perform_post_install_checks():
     for tool in tools:
         run_check_as_user = shared_state.TARGET_USER if tool in ["zoxide", "atuin"] else None
         
-        if check_command_exists([tool], as_user=run_check_as_user):
+        if command_utils.check_command_exists([tool], as_user=run_check_as_user):
             ver, ver_ok = " (version N/A)", False
             try:
                 cmd_for_ver = [tool]
@@ -25,7 +24,7 @@ def perform_post_install_checks():
                     cmd_list = cmd_for_ver + ([flag] if flag else [])
                     if tool == "pip3" and flag == "--version": cmd_list = [tool, "show", "pip"]
                     
-                    res = run_command(cmd_list, capture_output=True, text=True, check=False, as_user=run_ver_as)
+                    res = command_utils.run_command(cmd_list, capture_output=True, text=True, check=False, as_user=run_ver_as)
                     if res.returncode == 0 and res.stdout.strip():
                         out_line = res.stdout.strip().splitlines()[0]
                         if tool == "pip3" and "Version:" in res.stdout:

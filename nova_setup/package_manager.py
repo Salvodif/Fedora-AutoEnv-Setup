@@ -1,5 +1,7 @@
 from . import shared_state
-from .utils import run_command
+from . import utils
+from . import utils as command_utils
+
 import subprocess # For CalledProcessError, TimeoutExpired
 
 def install_dnf_packages(packages_list: list[str]):
@@ -14,7 +16,7 @@ def install_dnf_packages(packages_list: list[str]):
         shared_state.log.info(f"({i+1}/{len(packages_list)}) DNF: [bold blue]{pkg_name}[/bold blue]...")
         with shared_state.console.status(f"[green]Processing {pkg_name}...[/]", spinner="earth"):
             try:
-                res = run_command(["dnf", "install", "-y", pkg_name], capture_output=True, text=True)
+                res = command_utils.run_command(["dnf", "install", "-y", pkg_name], capture_output=True, text=True)
                 if "Nothing to do" not in res.stdout and "already installed" not in res.stdout:
                     installed_new = True; shared_state.log.info(f":heavy_check_mark: '[cyan]{pkg_name}[/]' installed.")
                 else: shared_state.log.info(f":package: '[cyan]{pkg_name}[/]' verified/already installed.")

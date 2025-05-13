@@ -1,7 +1,8 @@
 import os
 import pwd
 from . import shared_state
-from .utils import run_command
+from . import utils as command_utils
+
 
 def install_oh_my_zsh():
     omz_dir = shared_state.TARGET_USER_HOME / ".oh-my-zsh"
@@ -12,7 +13,7 @@ def install_oh_my_zsh():
     cmd = "curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sh -s -- --unattended --keep-zshrc"
     with shared_state.console.status("[green]Installing OMZ...[/]", spinner="monkey"):
         try:
-            run_command(cmd, as_user=shared_state.TARGET_USER, shell=True, check=True)
+            command_utils.run_command(cmd, as_user=shared_state.TARGET_USER, shell=True, check=True)
             shared_state.log.info(":rocket: OMZ installed.")
         except Exception as e:
             shared_state.log.error(f"[bold red]OMZ install failed: {e}[/]")
@@ -21,7 +22,7 @@ def install_omz_plugins():
     shared_state.log.info("Installing OMZ plugins...")
     plugins_dir = shared_state.TARGET_USER_HOME / ".oh-my-zsh/custom/plugins"
     try:
-        run_command(["mkdir", "-p", str(plugins_dir)], as_user=shared_state.TARGET_USER)
+        command_utils.run_command(["mkdir", "-p", str(plugins_dir)], as_user=shared_state.TARGET_USER)
     except Exception as e:
         shared_state.log.error(f"Failed to create OMZ plugins dir: {e}")
         return
@@ -35,7 +36,7 @@ def install_omz_plugins():
         shared_state.log.info(f"Cloning OMZ plugin '[cyan]{p_name}[/]'...")
         with shared_state.console.status(f"[green]Cloning {p_name}...[/]"):
             try:
-                run_command(["git", "clone", "--depth", "1", p_url, str(target)], as_user=shared_state.TARGET_USER)
+                command_utils.run_command(["git", "clone", "--depth", "1", p_url, str(target)], as_user=shared_state.TARGET_USER)
                 shared_state.log.info(f":heavy_check_mark: OMZ Plugin '{p_name}' installed.")
             except Exception as e_git:
                 shared_state.log.error(f"[bold red]Failed OMZ plugin clone '{p_name}': {e_git}[/]")
