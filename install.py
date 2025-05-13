@@ -99,7 +99,7 @@ def main():
     
     # Initialize console and logger in shared_state
     shared_state.console = RichConsoleImport(record=True, log_time=False, log_path=False)
-    
+
     std_logging.basicConfig(
         level="DEBUG", # Root logger level
         format="%(message)s", 
@@ -127,7 +127,8 @@ def main():
         ui.initialize_script_logging_and_user() # Completes shared_state init, sets log file
         clean_script_exit = ui.display_main_menu()
     except SystemExit:
-        if shared_state.log: shared_state.log.info("Nova System Setup exited via SystemExit.")
+        if shared_state.log:
+            shared_state.log.info("Nova System Setup exited via SystemExit.")
         else: print("INFO: Nova System Setup exited via SystemExit.", flush=True)
         clean_script_exit = True 
     except Exception as e_main:
@@ -150,10 +151,10 @@ def main():
             except Exception as e_save_f:
                 if shared_state.log: shared_state.log.error(f"Error saving console (main finally): {e_save_f}")
                 else: print(f"ERROR: Saving console output: {e_save_f}", file=sys.stderr, flush=True)
-        
+
         if shared_state.log:
-            shared_state.log.info(f"--- Nova Setup execution finished. File log (WARNING+): [link=file://{final_log_file_path}]{final_log_file_path}[/link] ---")
-        else: print(f"INFO: Execution finished. Log: {final_log_file_path}", flush=True)
+            escaped_log_path = RichTextImport.escape_markup(str(final_log_file_path))
+            shared_state.log.info(f"--- Nova Setup execution finished. Full log at [link=file://{escaped_log_path}]{escaped_log_path}[/link] ---")
 
 if __name__ == "__main__":
     main()
