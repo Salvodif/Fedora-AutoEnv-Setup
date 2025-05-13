@@ -16,64 +16,94 @@ from .post_install_checks import perform_post_install_checks
 
 
 def initialize_script_logging_and_user():
-    """Initializes user-specific paths and file logging.
-    Assumes shared_state.log (Rich logger) and shared_state.SCRIPT_DIR are already set.
     """
+    Initializes user-specific paths (TARGET_USER, TARGET_USER_HOME),
+    sets the final LOG_FILE_PATH, and configures the file logging handler.
+    Assumes shared_state.log (Rich console logger) and shared_state.SCRIPT_DIR
+    have already been set by install.py.
+    """
+    # Il logger Rich (shared_state.log) dovrebbe essere già configurato da install.py
+    # per loggare su console. Qui aggiungiamo il FileHandler per i log su file.
+
     if os.geteuid() != 0:
-        if shared_state.log: shared_state.log.critical("[bold red]Must be run as root (sudo).[/]")
-        else: print("CRITICAL: Must be run as root (sudo).", file=sys.stderr, flush=True) # Fallback
+        if shared_state.log:
+            shared_state.log.critical("[bold red]This script must be run as root (or with sudo).[/]")
+        else: # Fallback se il logger Rich non è ancora pronto (improbabile)
+            print("CRITICAL: This script must be run as root (or with sudo).", file=sys.stderr, flush=True)
         sys.exit(1)
 
     shared_state.TARGET_USER = os.getenv("SUDO_USER")
     if not shared_state.TARGET_USER:
-        if shared_state.log: shared_state.log.warning("No SUDO_USER. Targeting root user.")
-        else: print("WARNING: No SUDO_USER. Targeting root user.", flush=True)
+        if shared_state.log: shared_state.log.warning("No SUDO_USER detected. User-specific configurations will target the root user.")
+        else: print("WARNING: No SUDO_USER. Targeting root.", flush=True)
         shared_state.TARGET_USER = pwd.getpwuid(os.geteuid()).pw_name
     
     try:
         pw_entry = pwd.getpwnam(shared_state.TARGET_USER)
         shared_state.TARGET_USER_HOME = Path(pw_entry.pw_dir)
     except KeyError:
-        if shared_state.log: shared_state.log.critical(f"[bold red]User '{shared_state.TARGET_USER}' not found.[/]")
+        if shared_state.log: shared_state.log.critical(f"[bold red]User '{shared_state.TARGET_USER}' not found. Cannot determine home directory.[/]")
         else: print(f"CRITICAL: User '{shared_state.TARGET_USER}' not found.", file=sys.stderr, flush=True)
         sys.exit(1)
     
     if not shared_state.TARGET_USER_HOME.is_dir():
-        if shared_state.log: shared_state.log.critical(f"[bold red]Home dir {shared_state.TARGET_USER_HOME} missing.[/]")
-        else: print(f"CRITICAL: Home dir {shared_state.TARGET_USER_HOME} missing.", file=sys.stderr, flush=True)
+        if shared_state.log: shared_state.log.critical(f"[bold red]Home directory for target user '{shared_state.TARGET_USER_HOME}' does not exist.[/]")
+        else: print(f"CRITICAL: Home dir '{shared_state.TARGET_USER_HOME}' missing.", file=sys.stderr, flush=True)
         sys.exit(1)
     
-    shared_state.LOG_FILE_PATH = shared_state.SCRIPT_DIR / shared_state.LOG_FILE_NAME
+    # LOG_FILE_PATH è ora SCRIPT_DIR / LOG_FILE_NAME, impostato in system_config.initialize_script_base_paths()
+    # e referenziato da shared_state.LOG_FILE_PATH.
 
-    # Configure file logging part (WARNING+ level)
     if shared_state.log: # Assicurati che il logger Rich esista
-        file_log_handler = std_logging.FileHandler(shared_state.LOG_FILE_PATH, mode='a', encoding='utf-8') # Append mode
-        file_log_handler.setLevel(std_logging.WARNING) # Solo WARNING, ERROR, CRITICAL nel file
-        # Formattatore più dettagliato per il file di log
-        file_formatter = std_logging.Formatter("%(asctime)s [%(levelname)-8s] %(name)s (%(filename)s:%(lineno)d): %(message)s")
+        # Rimuovi eventuali handler di file preesistenti per evitare duplicazioni se questa funzione viene chiamata più volte (improbabile ma sicuro)
+        for handler in list(shared_state.log.handlers): # Itera su una copia della lista
+            if isinstance(handler, std_logging.FileHandler) and handler.baseFilename == str(shared_state.LOG_FILE_PATH):
+                shared_state.log.removeHandler(handler)
+                handler.close()
+
+        file_log_handler = std_logging.FileHandler(shared_state.LOG_FILE_PATH, mode='a', encoding='utf-8') # Modalità append
+        file_log_handler.setLevel(std_logging.WARNING) # Logga solo WARNING, ERROR, CRITICAL nel file
+        
+        # Usa un formattatore più dettagliato per il file di log per includere il nome del modulo e il numero di riga
+        file_formatter = std_logging.Formatter(
+            "%(asctime)s [%(levelname)-8s] %(name)s (%(filename)s:%(lineno)d): %(message)s"
+        )
         file_log_handler.setFormatter(file_formatter)
-        shared_state.log.addHandler(file_log_handler)
+        shared_state.log.addHandler(file_log_handler) # Aggiungi il FileHandler al logger Rich
 
-        shared_state.log.info(f"--- Nova System Setup Script Initialized (Log vRefactor.ui) ---")
-        shared_state.log.info(f"Target user: [yellow]{shared_state.TARGET_USER}[/], home: [yellow]{shared_state.TARGET_USER_HOME}[/].")
+        shared_state.log.info(f"--- Nova System Setup Script Initialized (Log vUI.Corrected) ---")
+        shared_state.log.info(f"Target user: [yellow]{shared_state.TARGET_USER}[/], Target user home: [yellow]{shared_state.TARGET_USER_HOME}[/].")
 
-        # Prendi la classe Text per l'escape del markup in modo sicuro
-        _, _, Text_cls, _, _, _, _, _, _ = shared_state.get_rich_components()
-        escaped_log_path_ui = Text_cls.escape_markup(str(shared_state.LOG_FILE_PATH))
+        try:
+            from rich.markup import escape as escape_markup_func
+        except ImportError:
+            # Fallback molto semplice se rich.markup.escape non è disponibile (non dovrebbe succedere se rich è installato)
+            escape_markup_func = lambda text_to_escape: str(text_to_escape).replace('[', r'\[').replace(']', r'\]')
+            shared_state.log.warning("rich.markup.escape not found in ui.py, using basic fallback for log path link.")
+        
+        escaped_log_path_ui = escape_markup_func(str(shared_state.LOG_FILE_PATH))
         
         shared_state.log.info(f"Console INFO logging enabled. File WARNING+ logging to: [link=file://{escaped_log_path_ui}][cyan]{escaped_log_path_ui}[/cyan][/link]")
-    else: # Fallback se il logger Rich non è stato inizializzato (non dovrebbe accadere)
-        print(f"Fallback logging: File logging (WARNING+) to {shared_state.LOG_FILE_PATH}", flush=True)
+    else:
+        # Questo blocco non dovrebbe mai essere raggiunto se _ensure_rich_library e l'inizializzazione del logger in install.py funzionano
+        print(f"Fallback non-Rich logging: File logging (WARNING+) to {shared_state.LOG_FILE_PATH}", flush=True)
 
 
-    # Check source config files
-    # Assicurati che ZSHRC_SOURCE_PATH e NANORC_SOURCE_PATH siano stati impostati in system_config.initialize_script_base_paths()
-    if not shared_state.ZSHRC_SOURCE_PATH or not shared_state.ZSHRC_SOURCE_PATH.is_file() or \
-       not shared_state.NANORC_SOURCE_PATH or not shared_state.NANORC_SOURCE_PATH.is_file():
-        if shared_state.log: shared_state.log.critical("[bold red]Source .zshrc or .nanorc missing or paths invalid. Exiting.[/]")
-        else: print("CRITICAL: Source .zshrc or .nanorc missing. Exiting.", file=sys.stderr, flush=True)
+    # Verifica l'esistenza dei file di configurazione sorgente
+    # ZSHRC_SOURCE_PATH e NANORC_SOURCE_PATH dovrebbero essere stati impostati da initialize_script_base_paths()
+    if not shared_state.ZSHRC_SOURCE_PATH or not shared_state.ZSHRC_SOURCE_PATH.is_file():
+        msg_err_zsh = f"Source file '{shared_state.ZSHRC_SOURCE_FILE_NAME}' not found or path invalid: '{shared_state.ZSHRC_SOURCE_PATH}'"
+        if shared_state.log: shared_state.log.critical(f"[bold red]{msg_err_zsh}. Exiting.[/]")
+        else: print(f"CRITICAL: {msg_err_zsh}. Exiting.", file=sys.stderr, flush=True)
         sys.exit(1)
-    if shared_state.log: shared_state.log.info("Source config files (.zshrc, .nanorc) found and paths are set.")
+
+    if not shared_state.NANORC_SOURCE_PATH or not shared_state.NANORC_SOURCE_PATH.is_file():
+        msg_err_nano = f"Source file '{shared_state.NANORC_SOURCE_FILE_NAME}' not found or path invalid: '{shared_state.NANORC_SOURCE_PATH}'"
+        if shared_state.log: shared_state.log.critical(f"[bold red]{msg_err_nano}. Exiting.[/]")
+        else: print(f"CRITICAL: {msg_err_nano}. Exiting.", file=sys.stderr, flush=True)
+        sys.exit(1)
+        
+    if shared_state.log: shared_state.log.info("Source configuration files (.zshrc, .nanorc) found and paths are confirmed.")
 
 
 def perform_initial_setup():

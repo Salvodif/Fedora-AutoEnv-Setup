@@ -132,12 +132,12 @@ def main():
                 rich_escape_func = lambda text: str(text).replace('[', r'\[').replace(']', r'\]')
                 if shared_state.log: shared_state.log.warning("rich.markup.escape not found, using basic escape for exception logging.")
 
-            escaped_exception_message = rich_escape_func(str(e_main))
+                escape_markup_func = lambda text_to_escape: str(text_to_escape).replace('[', r'\[')
+                shared_state.log.warning("rich.markup.escape not found, using basic fallback for log path link.")
 
-            shared_state.log.exception(f"[bold red]Unhandled critical error in main: {escaped_exception_message}[/]",
-                                       exc_info=e_main) # Passa l'eccezione originale per il traceback
-        else: 
-            print(f"CRITICAL ERROR (logger N/A): {e_main}", file=sys.stderr, flush=True)
+            escaped_log_path = escape_markup_func(str(final_log_file_path))
+            shared_state.log.info(f"--- Nova Setup execution finished. File log (WARNING+): [link=file://{escaped_log_path}]{escaped_log_path}[/link] ---")
+        else: print(f"INFO: Execution finished. Log: {final_log_file_path}", flush=True)
         
         if shared_state.console:
             shared_state.console.print_exception(show_locals=True, max_frames=8) # Questo stamperà il traceback di e_main
