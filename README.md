@@ -1,4 +1,4 @@
-# My Personal Dotfiles & Fedora Setup Automator 🚀
+# Fedora-AutoEnv-Setup 🚀
 
 This repository contains my personal configuration files (dotfiles) and an automation script (`install.py`) to set up my preferred environment on a fresh **Fedora Workstation** installation. The goal is to keep my development and shell environment consistent and quickly deployable.
 
