@@ -25,7 +25,6 @@ def _ensure_rich_library() -> bool:
         current_version = getattr(rich_module, "__version__", "unknown")
         print(f"Python 'rich' library found (v{current_version}). Checking for updates...", flush=True)
         
-        # CORREZIONE: Definisci force_upgrade_check qui
         force_upgrade_check = current_version == "unknown" 
 
         try:
@@ -83,22 +82,17 @@ def main():
     from rich.table import Table as RichTableImp
     from rich.padding import Padding as RichPaddingImp
 
-    RichConsoleImport = RichConsoleImp
-    RichPanelImport = RichPanelImp
-    RichTextImport = RichTextImp
-    RichConfirmImport = RichConfirmImp
-    RichPromptImport = RichPromptImp
-    RichIntPromptImport = RichIntPromptImp
-    RichLoggingHandlerImport = RichLoggingHandlerImp
-    RichTableImport = RichTableImp
-    RichPaddingImport = RichPaddingImp
-
-    # Import shared_state now that rich components are assigned at the top level of this script
-    # These top-level assignments will be seen by shared_state when it's imported.
     from nova_setup import shared_state
     
     # Initialize console and logger in shared_state
-    shared_state.console = RichConsoleImport(record=True, log_time=False, log_path=False)
+    shared_state._set_rich_components(
+        RichConsoleImp, RichPanelImp, RichTextImp, 
+        RichConfirmImp, RichPromptImp, RichIntPromptImp, 
+        RichLoggingHandlerImp, RichTableImp, RichPaddingImp
+    )
+
+    Console_cls, _, _, _, _, _, _, _, _ = shared_state.get_rich_components() # Prendi la classe Console
+    shared_state.console = Console_cls(record=True, log_time=False, log_path=False) # Crea l'istanza
 
     std_logging.basicConfig(
         level="DEBUG", # Root logger level
@@ -132,12 +126,29 @@ def main():
         else: print("INFO: Nova System Setup exited via SystemExit.", flush=True)
         clean_script_exit = True 
     except Exception as e_main:
-        if shared_state.log: shared_state.log.exception(f"[bold red]Unhandled critical error in main: {e_main}[/]")
-        else: print(f"CRITICAL ERROR (logger N/A): {e_main}", file=sys.stderr, flush=True)
+        if shared_state.log:
+            # Importa la funzione di escape o usa un fallback
+            try:
+                from rich.markup import escape as rich_escape_func
+            except ImportError:
+                rich_escape_func = lambda text: str(text).replace('[', r'\[').replace(']', r'\]')
+                if shared_state.log: shared_state.log.warning("rich.markup.escape not found, using basic escape for exception logging.")
+
+            # Fai l'escape del messaggio dell'eccezione
+            escaped_exception_message = rich_escape_func(str(e_main))
+            
+            # Logga il messaggio con l'escape, mantenendo il traceback originale
+            shared_state.log.exception(f"[bold red]Unhandled critical error in main: {escaped_exception_message}[/]",
+                                       exc_info=e_main) # Passa l'eccezione originale per il traceback
+        else: 
+            print(f"CRITICAL ERROR (logger N/A): {e_main}", file=sys.stderr, flush=True)
         
         if shared_state.console:
-            shared_state.console.print_exception(show_locals=True, max_frames=8)
-            shared_state.console.print(RichPanelImport(f"Critical error. Logs: {shared_state.LOG_FILE_PATH}", title="[red]NOVA SETUP FAILED[/]", style="red"))
+            shared_state.console.print_exception(show_locals=True, max_frames=8) # Questo stamperà il traceback di e_main
+            # Per il Panel, usiamo anche qui l'escape se e_main fosse incluso nel testo del Panel
+            # Ma qui stampiamo solo un messaggio generico e il percorso del log.
+            panel_text = f"A critical error occurred. Please check the logs (if available) at {shared_state.LOG_FILE_PATH} and the console output above."
+            shared_state.console.print(RichPanelImport(panel_text, title="[bold red]NOVA SETUP FAILED CRITICALLY[/]", border_style="red"))
         sys.exit(1)
     finally:
         final_log_file_path = shared_state.LOG_FILE_PATH
@@ -145,7 +156,7 @@ def main():
         
         if shared_state.console and not clean_script_exit:
             try:
-                if not console_output_file_path.exists(): # Avoid re-saving if menu exit already did
+                if not console_output_file_path.exists():
                     shared_state.console.save_text(console_output_file_path)
                     if shared_state.log: shared_state.log.info(f"Console output (abrupt exit): {console_output_file_path}")
             except Exception as e_save_f:
@@ -154,7 +165,8 @@ def main():
 
         if shared_state.log:
             escaped_log_path = RichTextImport.escape_markup(str(final_log_file_path))
-            shared_state.log.info(f"--- Nova Setup execution finished. Full log at [link=file://{escaped_log_path}]{escaped_log_path}[/link] ---")
+            shared_state.log.info(f"--- Nova Setup execution finished. File log (WARNING+): [link=file://{escaped_log_path}]{escaped_log_path}[/link] ---")
+        else: print(f"INFO: Execution finished. Log: {final_log_file_path}", flush=True)
 
 if __name__ == "__main__":
     main()

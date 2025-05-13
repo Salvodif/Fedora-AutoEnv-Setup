@@ -1,91 +1,103 @@
+import os
+import shlex
+import subprocess
+import pwd
 from pathlib import Path
-from typing import Optional
-import logging as std_logging
+from typing import List, Optional
+import logging as std_logging # Fallback logger
 
-# These will be populated by install.py after rich is ensured and imported.
-# This is a bit of a workaround for dynamic rich import.
-# Modules importing shared_state will get these rich components.
-# If a module is imported *before* install.py populates these, they will be None.
-# install.py ensures they are populated before modules that use them heavily are called.
-Console = None
-Panel = None
-Text = None
-Confirm = None
-Prompt = None
-IntPrompt = None
-RichHandler = None
-Table = None
-Padding = None
+from . import shared_state
 
-# Global application state
-console: Optional[Console] = None
-log: Optional[std_logging.Logger] = None
+def run_command(command: List[str] | str,
+                check: bool = True,
+                capture_output: bool = False,
+                text: bool = True,
+                as_user: Optional[str] = None,
+                shell: bool = False,
+                cwd: Optional[Path] = None,
+                timeout: Optional[int] = 300) -> subprocess.CompletedProcess:
+    cmd_for_log = command if isinstance(command, str) else ' '.join(shlex.quote(str(s)) for s in command)
+    
+    logger = shared_state.log if shared_state.log else std_logging.getLogger("utils-fallback")
+    logger.debug(f"Executing: {cmd_for_log}{f' as {as_user}' if as_user else ''}{f' in {cwd}' if cwd else ''}")
 
-SCRIPT_DIR: Path = Path(".") # Will be updated by initialize_script_base_paths
-TARGET_USER: str = ""
-TARGET_USER_HOME: Path = Path(".")
-LOG_FILE_PATH: Path = Path(".") # Will be updated by initialize_script_logging_and_user
-IS_FEDORA: bool = False
+    final_command_parts: List[str] = []
+    actual_command_to_run: List[str] | str
 
-# Configuration constants (can also be loaded from a config file in future)
-ZSHRC_SOURCE_FILE_NAME: str = ".zshrc"
-NANORC_SOURCE_FILE_NAME: str = ".nanorc"
-ZSHRC_SUBDIRECTORY: str = "zsh"
-NANORC_SUBDIRECTORY: str = "nano"
-LOG_FILE_NAME: str = "nova_setup.log" # Base log file name
+    if as_user:
+        final_command_parts.extend(["sudo", "-u", as_user])
+        if shell:
+            pw_entry = pwd.getpwnam(as_user)
+            user_shell = pw_entry.pw_shell or "/bin/bash" 
+            cmd_str_to_embed = command if isinstance(command, str) else " ".join(shlex.quote(str(s)) for s in command)
+            final_command_parts.extend([user_shell, "-ic", cmd_str_to_embed])
+            actual_command_to_run = final_command_parts
+            shell = False 
+        else:
+            final_command_parts.extend(command if isinstance(command, list) else [command])
+            actual_command_to_run = final_command_parts
+    else: 
+        actual_command_to_run = command
 
-# Derived paths - will be set after SCRIPT_DIR is known
-ZSHRC_SOURCE_PATH: Optional[Path] = None
-NANORC_SOURCE_PATH: Optional[Path] = None
+    try:
+        process_env = os.environ.copy()
+        if as_user and not shell: 
+            pw_entry = pwd.getpwnam(as_user)
+            process_env['HOME'] = pw_entry.pw_dir
+            process_env['USER'] = as_user
+            process_env['LOGNAME'] = as_user
+            try: 
+                dbus_address_cmd = f"systemctl --user -M {shlex.quote(as_user)}@.service show-environment"
+                res_dbus = subprocess.run(shlex.split(dbus_address_cmd), capture_output=True, text=True, check=False, timeout=5)
+                if res_dbus.returncode == 0:
+                    for line_env in res_dbus.stdout.splitlines():
+                        if line_env.startswith("DBUS_SESSION_BUS_ADDRESS="):
+                            process_env['DBUS_SESSION_BUS_ADDRESS'] = line_env.split('=', 1)[1]
+                            logger.debug(f"Set DBUS_SESSION_BUS_ADDRESS for {as_user} via systemctl.")
+                            break
+                elif Path(f"/run/user/{pw_entry.pw_uid}/bus").exists(): 
+                     process_env['DBUS_SESSION_BUS_ADDRESS'] = f"unix:path=/run/user/{pw_entry.pw_uid}/bus"
+                     logger.debug(f"Set DBUS_SESSION_BUS_ADDRESS for {as_user} via common path.")
+            except Exception as e_dbus: logger.debug(f"DBUS address for {as_user} not set: {e_dbus}.")
 
-# Package lists
-DNF_PACKAGES_BASE: list[str] = [
-    "zsh", "python3", "python3-pip",
-    "git", "curl", "stow", "dnf-plugins-core", "cargo",
-    "powerline-fonts", "btop", "bat", "fzf",
-    "google-chrome-stable",
-]
+        result = subprocess.run(
+            actual_command_to_run, check=check, capture_output=capture_output, text=text,
+            shell=shell, cwd=cwd, env=process_env, timeout=timeout
+        )
+        return result
+    except subprocess.TimeoutExpired as e_timeout:
+        cmd_str_err_timeout = ' '.join(e_timeout.cmd) if isinstance(e_timeout.cmd, list) else e_timeout.cmd
+        logger.error(f"Command '[bold cyan]{cmd_str_err_timeout}[/]' timed out after {e_timeout.timeout}s.")
+        raise
+    except subprocess.CalledProcessError as e_call:
+        cmd_str_err_call = ' '.join(e_call.cmd) if isinstance(e_call.cmd, list) else e_call.cmd
+        logger.error(f"Command '[bold cyan]{cmd_str_err_call}[/]' failed (code {e_call.returncode}).")
+        if capture_output: 
+            if e_call.stdout: logger.error(f"[stdout]: {e_call.stdout.strip()}")
+            if e_call.stderr: logger.error(f"[stderr]: {e_call.stderr.strip()}")
+        raise
+    except FileNotFoundError:
+        cmd_failed_fnf = "UnknownCmd"
+        if isinstance(actual_command_to_run, str):
+            cmd_failed_fnf = actual_command_to_run.split()[0]
+        elif isinstance(actual_command_to_run, list) and actual_command_to_run:
+            cmd_failed_fnf = actual_command_to_run[0]
+        logger.error(f"Command not found: {cmd_failed_fnf}")
+        raise
 
-OMZ_PLUGINS: list[dict[str, str]] = [
-    {"name": "zsh-autosuggestions", "url": "https://github.com/zsh-users/zsh-autosuggestions"},
-    {"name": "zsh-syntax-highlighting", "url": "https://github.com/zsh-users/zsh-syntax-highlighting.git"},
-    {"name": "you-should-use", "url": "https://github.com/MichaelAquilina/zsh-you-should-use.git"},
-    {"name": "zsh-eza", "url": "https://github.com/z-shell/zsh-eza"},
-    {"name": "fzf-tab", "url": "https://github.com/Aloxaf/fzf-tab"}
-]
-
-CARGO_TOOLS: list[str] = ["eza", "du-dust"]
-
-SCRIPTED_TOOLS: list[dict[str, str]] = [
-    {"name": "zoxide", "check_command": "zoxide --version", "url": "https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh", "method": "sh"},
-    {"name": "atuin", "check_command": "atuin --version", "url": "https://setup.atuin.sh", "method": "bash"},
-]
-
-GNOME_EXTENSIONS_CONFIG: list[dict[str, str]] = [
-    {"name": "User Themes", "uuid": "user-theme@gnome-shell-extensions.gcampax.github.com", "dnf_package": "gnome-shell-extension-user-themes"},
-    {"name": "Blur My Shell", "uuid": "blur-my-shell@aunetx", "dnf_package": "gnome-shell-extension-blur-my-shell"},
-    {"name": "Burn My Windows", "uuid": "burn-my-windows@schneegans.github.com", "dnf_package": "gnome-shell-extension-burn-my-windows"},
-    {"name": "Vitals (System Monitor)", "uuid": "Vitals@CoreCoding.com", "dnf_package": "gnome-shell-extension-vitals"},
-    {"name": "Caffeine", "uuid": "caffeine@patapon.info", "dnf_package": "gnome-shell-extension-caffeine"},
-]
-GNOME_MANAGEMENT_DNF_PACKAGES: list[str] = [
-    "gnome-tweaks",
-    "gnome-shell-extension-user-themes",
-    "gnome-extensions-app",
-    "extension-manager"
-]
-
-# To be populated by install.py after rich is verified and imported
-# This allows other modules to use `from nova_setup.shared_state import Console, Panel, etc.`
-def _set_rich_components(console_imp, panel_imp, text_imp, confirm_imp, prompt_imp, int_prompt_imp, rich_handler_imp, table_imp, padding_imp):
-    global Console, Panel, Text, Confirm, Prompt, IntPrompt, RichHandler, Table, Padding
-    Console, Panel, Text, Confirm, Prompt, IntPrompt, RichHandler, Table, Padding = \
-        console_imp, panel_imp, text_imp, confirm_imp, prompt_imp, int_prompt_imp, rich_handler_imp, table_imp, padding_imp
-
-# Helper to access Rich components if they were set
-def get_rich_components():
-    if not Console: # Check if a core component is None
-        # This means install.py didn't call _set_rich_components yet, or rich failed.
-        # This situation should ideally be avoided by careful import order in install.py.
-        raise ImportError("Rich components not yet initialized in shared_state. Ensure install.py populates them before use.")
-    return Console, Panel, Text, Confirm, Prompt, IntPrompt, RichHandler, Table, Padding
+def check_command_exists(command_name_parts: List[str] | str, as_user: Optional[str] = None) -> bool:
+    cmd_to_verify = command_name_parts[0] if isinstance(command_name_parts, list) else command_name_parts.split()[0]
+    if as_user:
+        check_cmd_str_inner = f"command -v {shlex.quote(cmd_to_verify)}"
+        try:
+            run_command(check_cmd_str_inner, as_user=as_user, shell=True, capture_output=True, check=True)
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            return False
+    else: 
+        try:
+            check_cmd_str_root = f"command -v {shlex.quote(cmd_to_verify)}"
+            run_command(check_cmd_str_root, shell=True, capture_output=True, check=True)
+            return True
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            return False
