@@ -25,7 +25,6 @@ def _ensure_rich_library() -> bool:
         current_version = getattr(rich_module, "__version__", "unknown")
         print(f"Python 'rich' library found (v{current_version}). Checking for updates...", flush=True)
         
-        # CORREZIONE: Definisci force_upgrade_check qui
         force_upgrade_check = current_version == "unknown" 
 
         try:
@@ -82,20 +81,7 @@ def main():
     from rich.logging import RichHandler as RichLoggingHandlerImp
     from rich.table import Table as RichTableImp
     from rich.padding import Padding as RichPaddingImp
-    from rich.markup import escape as RichMarkupEscapeFunc
 
-    RichConsoleImport = RichConsoleImp
-    RichPanelImport = RichPanelImp
-    RichTextImport = RichTextImp
-    RichConfirmImport = RichConfirmImp
-    RichPromptImport = RichPromptImp
-    RichIntPromptImport = RichIntPromptImp
-    RichLoggingHandlerImport = RichLoggingHandlerImp
-    RichTableImport = RichTableImp
-    RichPaddingImport = RichPaddingImp
-
-    # Import shared_state now that rich components are assigned at the top level of this script
-    # These top-level assignments will be seen by shared_state when it's imported.
     from nova_setup import shared_state
     
     # Initialize console and logger in shared_state
@@ -104,6 +90,9 @@ def main():
         RichConfirmImp, RichPromptImp, RichIntPromptImp, 
         RichLoggingHandlerImp, RichTableImp, RichPaddingImp
     )
+
+    Console_cls, _, _, _, _, _, _, _, _ = shared_state.get_rich_components() # Prendi la classe Console
+    shared_state.console = Console_cls(record=True, log_time=False, log_path=False) # Crea l'istanza
 
     std_logging.basicConfig(
         level="DEBUG", # Root logger level
@@ -167,7 +156,7 @@ def main():
         
         if shared_state.console and not clean_script_exit:
             try:
-                if not console_output_file_path.exists(): # Avoid re-saving if menu exit already did
+                if not console_output_file_path.exists():
                     shared_state.console.save_text(console_output_file_path)
                     if shared_state.log: shared_state.log.info(f"Console output (abrupt exit): {console_output_file_path}")
             except Exception as e_save_f:
@@ -175,8 +164,9 @@ def main():
                 else: print(f"ERROR: Saving console output: {e_save_f}", file=sys.stderr, flush=True)
 
         if shared_state.log:
-            escaped_log_path = RichMarkupEscapeFunc(str(final_log_file_path))
-            shared_state.log.info(f"--- Nova Setup execution finished. Full log at [link=file://{escaped_log_path}]{escaped_log_path}[/link] ---")
+            escaped_log_path = RichTextImport.escape_markup(str(final_log_file_path))
+            shared_state.log.info(f"--- Nova Setup execution finished. File log (WARNING+): [link=file://{escaped_log_path}]{escaped_log_path}[/link] ---")
+        else: print(f"INFO: Execution finished. Log: {final_log_file_path}", flush=True)
 
 if __name__ == "__main__":
     main()
