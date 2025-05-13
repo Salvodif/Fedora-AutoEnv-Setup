@@ -81,7 +81,7 @@ plugins=(git
   	zsh-autosuggestions
 	zsh-syntax-highlighting
 	you-should-use
-	# zsh-eza
+	zsh-eza
 	fzf-tab)
 
 source $ZSH/oh-my-zsh.sh
