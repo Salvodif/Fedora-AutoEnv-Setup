@@ -68,6 +68,7 @@ GNOME_EXTENSIONS_CONFIG: list[dict[str, str]] = [
     {"name": "Vitals (System Monitor)", "uuid": "Vitals@CoreCoding.com", "dnf_package": "gnome-shell-extension-vitals"},
     {"name": "Caffeine", "uuid": "caffeine@patapon.info", "dnf_package": "gnome-shell-extension-caffeine"},
 ]
+
 GNOME_MANAGEMENT_DNF_PACKAGES: list[str] = [
     "gnome-tweaks",
     "gnome-shell-extension-user-themes",
