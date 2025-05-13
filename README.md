@@ -7,9 +7,9 @@ The goal is to keep my development and shell environment consistent across diffe
 ```
 dotfiles/
 ├── nano/
-│ └── nanorc.txt # Configuration for GNU nano editor
+│ └── .nanorc # Configuration for GNU nano editor
 ├── zsh/
-│ └── zshrc.txt # Configuration for Zsh shell
+│ └── .zshrc # Configuration for Zsh shell
 └── README.md # This file
 ```
 
