@@ -24,18 +24,17 @@ def _ensure_rich_library() -> bool:
         rich_module = importlib.import_module("rich")
         current_version = getattr(rich_module, "__version__", "unknown")
         print(f"Python 'rich' library found (v{current_version}). Checking for updates...", flush=True)
-        
+
         force_upgrade_check = current_version == "unknown" 
 
         try:
             pip_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "rich"]
             pip_process = subprocess.run(pip_cmd, check=True, capture_output=True, text=True, timeout=60)
-            
+
             was_upgraded_or_installed = "Successfully installed rich" in pip_process.stdout or \
                                         ( "Requirement already satisfied" not in pip_process.stdout and \
                                           "already up-to-date" not in pip_process.stdout )
 
-            # Ora force_upgrade_check è definito quando viene usato qui
             if was_upgraded_or_installed or force_upgrade_check:
                  print("Python 'rich' library may have been updated or version was unknown. Reloading...", flush=True)
                  for k in list(sys.modules.keys()):
@@ -118,7 +117,7 @@ def main():
 
     clean_script_exit = False
     try:
-        ui.initialize_script_logging_and_user() # Completes shared_state init, sets log file
+        ui.initialize_script_logging_and_user()
         clean_script_exit = ui.display_main_menu()
     except SystemExit:
         if shared_state.log:
@@ -127,17 +126,14 @@ def main():
         clean_script_exit = True 
     except Exception as e_main:
         if shared_state.log:
-            # Importa la funzione di escape o usa un fallback
             try:
                 from rich.markup import escape as rich_escape_func
             except ImportError:
                 rich_escape_func = lambda text: str(text).replace('[', r'\[').replace(']', r'\]')
                 if shared_state.log: shared_state.log.warning("rich.markup.escape not found, using basic escape for exception logging.")
 
-            # Fai l'escape del messaggio dell'eccezione
             escaped_exception_message = rich_escape_func(str(e_main))
-            
-            # Logga il messaggio con l'escape, mantenendo il traceback originale
+
             shared_state.log.exception(f"[bold red]Unhandled critical error in main: {escaped_exception_message}[/]",
                                        exc_info=e_main) # Passa l'eccezione originale per il traceback
         else: 
@@ -145,28 +141,33 @@ def main():
         
         if shared_state.console:
             shared_state.console.print_exception(show_locals=True, max_frames=8) # Questo stamperà il traceback di e_main
-            # Per il Panel, usiamo anche qui l'escape se e_main fosse incluso nel testo del Panel
-            # Ma qui stampiamo solo un messaggio generico e il percorso del log.
+
             panel_text = f"A critical error occurred. Please check the logs (if available) at {shared_state.LOG_FILE_PATH} and the console output above."
             shared_state.console.print(RichPanelImport(panel_text, title="[bold red]NOVA SETUP FAILED CRITICALLY[/]", border_style="red"))
         sys.exit(1)
     finally:
         final_log_file_path = shared_state.LOG_FILE_PATH
-        console_output_file_path = shared_state.SCRIPT_DIR / "nova_setup_console_output.txt"
-        
-        if shared_state.console and not clean_script_exit:
+        console_output_file_path = shared_state.SCRIPT_DIR / "nova_setup_log.txt"
+
+        if shared_state.console and not clean_script_exit : 
             try:
-                if not console_output_file_path.exists():
+                if not console_output_file_path.exists(): 
                     shared_state.console.save_text(console_output_file_path)
                     if shared_state.log: shared_state.log.info(f"Console output (abrupt exit): {console_output_file_path}")
-            except Exception as e_save_f:
-                if shared_state.log: shared_state.log.error(f"Error saving console (main finally): {e_save_f}")
+            except Exception as e_save_f: 
+                if shared_state.log: shared_state.log.error(f"Error saving console output (main finally): {e_save_f}")
                 else: print(f"ERROR: Saving console output: {e_save_f}", file=sys.stderr, flush=True)
-
+        
         if shared_state.log:
-            escaped_log_path = RichTextImport.escape_markup(str(final_log_file_path))
-            shared_state.log.info(f"--- Nova Setup execution finished. File log (WARNING+): [link=file://{escaped_log_path}]{escaped_log_path}[/link] ---")
-        else: print(f"INFO: Execution finished. Log: {final_log_file_path}", flush=True)
+            Text_cls_for_escape = None
+            if shared_state.Text:
+                Text_cls_for_escape = shared_state.Text
 
+            if Text_cls_for_escape:
+                escaped_log_path = Text_cls_for_escape.escape_markup(str(final_log_file_path))
+                shared_state.log.info(f"--- Nova Setup execution finished. File log (WARNING+): [link=file://{escaped_log_path}]{escaped_log_path}[/link] ---")
+            else:
+                shared_state.log.info(f"--- Nova Setup execution finished. Full log at {final_log_file_path} --- (markup link skipped as Rich.Text not available)")
+        else: print(f"INFO: Execution finished. Log: {final_log_file_path}", flush=True)
 if __name__ == "__main__":
     main()

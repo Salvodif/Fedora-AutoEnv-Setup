@@ -73,3 +73,8 @@ def manage_gnome_extensions():
     except Exception as e_list: shared_state.log.warning(f"Could not list enabled GNOME extensions: {e_list}")
     
     shared_state.console.print(Panel(Text("GNOME Extension Management Completed.", style="bold green"), expand=False))
+
+    from .post_install_checks import perform_post_install_checks # Aggiungi questo import in cima al file se non c'è
+    # ... (alla fine della funzione manage_gnome_extensions)
+    shared_state.log.info("Performing post-check for GNOME tools after management attempt...")
+    perform_post_install_checks(check_gnome_specific_tools=True)

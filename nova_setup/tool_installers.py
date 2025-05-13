@@ -36,7 +36,7 @@ def install_scripted_tools():
     for tool_info in shared_state.SCRIPTED_TOOLS:
         name, check_cmd_parts, url, method = tool_info["name"], tool_info["check_command"].split(), tool_info["url"], tool_info["method"]
         shared_state.log.info(f"Scripted tool: '[cyan]{name}[/]'...")
-        
+
         if command_utils.check_command_exists(check_cmd_parts, as_user=shared_state.TARGET_USER):
             try:
                 command_utils.run_command(check_cmd_parts, as_user=shared_state.TARGET_USER, capture_output=True, check=True) # Version check
@@ -46,7 +46,7 @@ def install_scripted_tools():
             except Exception as e_v_check: shared_state.log.debug(f"Unexpected error in version check for '{name}': {e_v_check}. Reinstalling.")
         else:
             shared_state.log.debug(f"'{name}' not found by check_command_exists. Installing.")
-        
+
         shared_state.log.info(f"Downloading & running install script for '[cyan]{name}[/]'...")
         cmd_str = f"curl -fsSL {url} | {method}"
         with shared_state.console.status(f"[green]Installing {name}...[/]", spinner="arrow3"):

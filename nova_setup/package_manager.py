@@ -1,5 +1,4 @@
 from . import shared_state
-from . import utils
 from . import utils as command_utils
 
 import subprocess # For CalledProcessError, TimeoutExpired
