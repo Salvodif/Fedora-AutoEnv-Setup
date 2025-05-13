@@ -6,7 +6,7 @@ import configparser
 from pathlib import Path
 
 from . import shared_state
-from .utils import run_command
+from . import utils as command_utils
 
 def initialize_script_base_paths():
     """Sets SCRIPT_DIR and derived source paths in shared_state."""

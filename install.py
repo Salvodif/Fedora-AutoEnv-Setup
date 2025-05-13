@@ -27,11 +27,23 @@ def _ensure_rich_library() -> bool:
         try:
             pip_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "rich"]
             pip_process = subprocess.run(pip_cmd, check=True, capture_output=True, text=True, timeout=60)
-            if "Requirement already satisfied" not in pip_process.stdout and "already up-to-date" not in pip_process.stdout:
-                 print("Python 'rich' library updated. Reloading...", flush=True)
-                 rich_module = importlib.reload(rich_module)
-                 print(f"Python 'rich' reloaded (v{getattr(rich_module, '__version__', 'unknown')}).", flush=True)
-            else: print("Python 'rich' is up-to-date.", flush=True)
+            was_upgraded_or_installed = "Successfully installed rich" in pip_process.stdout or \
+                                        ( "Requirement already satisfied" not in pip_process.stdout and \
+                                          "already up-to-date" not in pip_process.stdout )
+
+            if was_upgraded_or_installed or force_upgrade_check:
+                 print("Python 'rich' library may have been updated or version was unknown. Reloading...", flush=True)
+                 # Svuota i vecchi moduli rich da sys.modules per forzare una ricarica pulita
+                 for k in list(sys.modules.keys()):
+                     if k.startswith('rich'):
+                         del sys.modules[k]
+                 rich_module = importlib.import_module("rich") # Ricarica fresca
+                 new_version = getattr(rich_module, "__version__", "still unknown")
+                 print(f"Python 'rich' library reloaded (new version {new_version}).", flush=True)
+                 if new_version == "still unknown":
+                     print("Warning: 'rich' version still unknown after reload. Installation might be problematic.", file=sys.stderr, flush=True)
+            else:
+                print("Python 'rich' library is up-to-date.", flush=True)
             return True
         except subprocess.TimeoutExpired: print("Warning: Timeout upgrading 'rich'. Using installed.", file=sys.stderr, flush=True); return True
         except subprocess.CalledProcessError as e: print(f"Warning: Could not upgrade 'rich': {e.stderr.strip()}. Using installed.", file=sys.stderr, flush=True); return True
