@@ -1,10 +1,12 @@
-# install.py
 import logging
 import sys
 import os
 import shutil
 import pwd
 from pathlib import Path
+import json
+
+from rich.text import Text
 
 try:
     from importlib.metadata import DistributionNotFound, version as get_version
@@ -21,7 +23,6 @@ from myrich import (
 )
 from system_preparation import run_system_preparation # Fase 1
 from basic_configuration import run_basic_configuration # Fase 2
-# utils.py is used by system_preparation and basic_configuration
 
 # --- Constants ---
 LOG_FILE = "app.log"
@@ -29,14 +30,13 @@ REQUIREMENTS_FILE = "requirements.txt"
 SCRIPT_DIR = Path(__file__).resolve().parent
 CONFIG_SOURCE_DIR_ZSH = SCRIPT_DIR / "zsh"
 CONFIG_SOURCE_DIR_NANO = SCRIPT_DIR / "nano"
-# Questo marker ora indica il completamento di Fase 1 + Fase 2 + Fase 3 + copia config
-MARKER_FILE_NAME = ".full_setup_complete_marker" # Rinominato per chiarezza
-MARKER_FILE_PATH = SCRIPT_DIR / MARKER_FILE_NAME
 
-# --- Global State Flags ---
-PHASE_1_SYSTEM_PREP_SUCCESS_SESSION = False
-PHASE_2_BASIC_CONFIG_SUCCESS_SESSION = False
-PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION = False # Nuovo flag per la Fase 3
+STATUS_FILE_NAME = "setup_progress.json"
+STATUS_FILE_PATH = SCRIPT_DIR / STATUS_FILE_NAME
+
+STATUS_KEY_LAST_COMPLETED_PHASE = "last_completed_phase"
+
+LAST_COMPLETED_PHASE = 0
 
 
 # --- Logging Setup ---
@@ -47,8 +47,51 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+def load_last_completed_phase():
+    """Carica l'ultima fase completata dal file JSON. Se non esiste, restituisce 0."""
+    global LAST_COMPLETED_PHASE
+    if STATUS_FILE_PATH.exists():
+        try:
+            with open(STATUS_FILE_PATH, "r") as f:
+                status_data = json.load(f)
+                LAST_COMPLETED_PHASE = status_data.get(STATUS_KEY_LAST_COMPLETED_PHASE, 0)
+            print_info(f"Loaded setup progress from {STATUS_FILE_NAME}: Last completed phase = {LAST_COMPLETED_PHASE}")
+        except (json.JSONDecodeError, TypeError) as e: # TypeError se il file è vuoto o malformato
+            print_error(f"Error decoding {STATUS_FILE_NAME} or key missing: {e}. Resetting progress to 0.")
+            logging.error(f"Error in {STATUS_FILE_NAME} (or key missing): {e}. Resetting to 0.", exc_info=True)
+            LAST_COMPLETED_PHASE = 0
+            save_last_completed_phase()
+        except Exception as e:
+            print_error(f"Unexpected error loading {STATUS_FILE_NAME}: {e}. Resetting progress to 0.")
+            logging.error(f"Unexpected error loading status file {STATUS_FILE_NAME}: {e}", exc_info=True)
+            LAST_COMPLETED_PHASE = 0
+    else:
+        print_info(f"{STATUS_FILE_NAME} not found. Initializing progress: Last completed phase = 0.")
+        LAST_COMPLETED_PHASE = 0
+        save_last_completed_phase()
+
+def save_last_completed_phase():
+    """Salva l'ultima fase completata corrente nel file JSON."""
+    try:
+        with open(STATUS_FILE_PATH, "w") as f:
+            json.dump({STATUS_KEY_LAST_COMPLETED_PHASE: LAST_COMPLETED_PHASE}, f, indent=4)
+        print_info(f"Saved setup progress to {STATUS_FILE_NAME}: Last completed phase = {LAST_COMPLETED_PHASE}")
+    except Exception as e:
+        print_error(f"Failed to save setup progress to {STATUS_FILE_NAME}: {e}")
+        logging.error(f"Failed to save status file {STATUS_FILE_NAME}: {e}", exc_info=True)
+
+def update_last_completed_phase(phase_number: int):
+    """Aggiorna e salva l'ultima fase completata."""
+    global LAST_COMPLETED_PHASE
+    if phase_number > LAST_COMPLETED_PHASE:
+        LAST_COMPLETED_PHASE = phase_number
+        save_last_completed_phase()
+    elif phase_number < LAST_COMPLETED_PHASE:
+        print_warning(f"Attempted to set last completed phase to {phase_number}, but current is {LAST_COMPLETED_PHASE}. No downgrade.")
+        logging.warning(f"Attempted to downgrade last_completed_phase from {LAST_COMPLETED_PHASE} to {phase_number}.")
+
+
 def get_real_user_home():
-    # ... (nessuna modifica qui, la funzione rimane la stessa) ...
     sudo_user = os.environ.get('SUDO_USER')
     if sudo_user:
         try:
@@ -69,27 +112,7 @@ def get_real_user_home():
 USER_HOME_DIR = get_real_user_home()
 
 
-def check_full_setup_marker_exists():
-    """Checks if the full setup marker file exists."""
-    if MARKER_FILE_PATH.exists():
-        print_info(f"Marker file '{MARKER_FILE_NAME}' found. Full setup (Phases 1, 2, 3 + configs) previously completed.")
-        return True
-    return False
-
-def create_full_setup_marker_file():
-    """Creates a marker file to signify successful completion of ALL setup phases including configs."""
-    try:
-        MARKER_FILE_PATH.touch()
-        print_success(f"Full setup marker file '{MARKER_FILE_NAME}' created. All setup phases and config deployment complete.")
-        logging.info(f"Full setup marker file created at {MARKER_FILE_PATH}")
-        return True
-    except Exception as e:
-        print_error(f"Failed to create full setup marker file '{MARKER_FILE_NAME}': {e}")
-        logging.error(f"Failed to create full setup marker file: {e}", exc_info=True)
-        return False
-
 def check_python_requirements():
-    # ... (nessuna modifica qui, la funzione rimane la stessa) ...
     print_info(f"Checking Python requirements from {REQUIREMENTS_FILE}...")
     try:
         with open(REQUIREMENTS_FILE, 'r') as f:
@@ -98,10 +121,8 @@ def check_python_requirements():
         print_error(f"{REQUIREMENTS_FILE} not found. Cannot check Python dependencies.")
         logging.error(f"{REQUIREMENTS_FILE} not found.")
         return False
-
     missing_packages = []
     installed_ok_count = 0
-
     for req_str in requirements_list:
         if PKG_RESOURCE_STYLE:
             try:
@@ -130,7 +151,6 @@ def check_python_requirements():
             except Exception as e:
                 print_error(f"  [red]✗[/red] Error checking {package_name} (importlib.metadata): {e}")
                 missing_packages.append(package_name)
-    
     if missing_packages:
         print_error("\nThe following Python packages are missing or have issues:")
         for pkg in missing_packages:
@@ -138,29 +158,22 @@ def check_python_requirements():
         print_info(f"Please install them, e.g., using: pip install -r {REQUIREMENTS_FILE}")
         logging.error(f"Missing Python requirements: {', '.join(missing_packages)}")
         return False
-    
     if installed_ok_count > 0 or not requirements_list: 
         print_success("Python requirements check passed.")
     return True
 
-
 def deploy_user_configs():
-    # ... (nessuna modifica qui, la funzione rimane la stessa) ...
     print_step("Final Config Deployment", "Deploying user configuration files .zshrc and .nanorc")
-    
     if not USER_HOME_DIR or not USER_HOME_DIR.is_dir():
         print_error(f"User home directory '{USER_HOME_DIR}' not found or invalid. Cannot deploy configs.")
         logging.error(f"User home directory {USER_HOME_DIR} invalid for config deployment.")
         return False
-
     print_info(f"Target user home directory for configs: {USER_HOME_DIR}")
     all_copied_successfully = True
-    
     configs_to_deploy = {
         "zsh/.zshrc": USER_HOME_DIR / ".zshrc",
         "nano/.nanorc": USER_HOME_DIR / ".nanorc"
     }
-
     for src_rel_path, dest_path in configs_to_deploy.items():
         source_file = SCRIPT_DIR / src_rel_path
         if source_file.exists():
@@ -168,7 +181,6 @@ def deploy_user_configs():
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(source_file, dest_path)
                 print_success(f"Copied '{source_file.name}' to '{dest_path}'")
-                
                 sudo_uid_str = os.environ.get('SUDO_UID')
                 sudo_gid_str = os.environ.get('SUDO_GID')
                 if sudo_uid_str and sudo_gid_str and os.geteuid() == 0:
@@ -191,7 +203,6 @@ def deploy_user_configs():
             print_warning(f"Source file '{source_file}' not found. Skipping deployment of {source_file.name}.")
             logging.warning(f"Source file not found: {source_file}")
             all_copied_successfully = False
-
     if all_copied_successfully:
         print_success("All user configuration files (.zshrc, .nanorc) deployed successfully.")
     else:
@@ -199,107 +210,88 @@ def deploy_user_configs():
     return all_copied_successfully
 
 
-def display_menu(full_setup_already_done: bool):
-    """Displays the main menu and handles user choice."""
-    global PHASE_1_SYSTEM_PREP_SUCCESS_SESSION, PHASE_2_BASIC_CONFIG_SUCCESS_SESSION, PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION
-
+def display_menu():
+    """Displays the main menu based on LAST_COMPLETED_PHASE."""
     print_header("Main Menu - System Setup Utility")
     console.print(f"Target user for configs: {os.environ.get('SUDO_USER', os.getlogin())} (Home: {USER_HOME_DIR})")
-    if full_setup_already_done:
-        console.print("[green bold]INFO: Full Setup (Phases 1, 2, 3 + Configs) was previously completed.[/green]")
+
+    MAX_INITIAL_PHASES = 3
+    is_full_initial_setup_done = (LAST_COMPLETED_PHASE >= MAX_INITIAL_PHASES)
+
+    if is_full_initial_setup_done:
+        console.print("[green bold]INFO: Full Initial Setup (All Phases) was previously completed.[/green]")
         console.print("You can choose to re-run phases if needed.")
 
     console.print("Choose an option:")
 
-    # --- Option 1: System Preparation (Phase 1) ---
-    status_p1 = "[yellow]Pending[/yellow]"
-    if full_setup_already_done or PHASE_1_SYSTEM_PREP_SUCCESS_SESSION:
-        status_p1 = "[green]✓ Done[/green]" if full_setup_already_done else "[cyan]✓ Done this session[/cyan]"
+    # --- Opzione 1: Fase 1 ---
+    status_p1 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 1 else "[yellow]Pending[/yellow]"
     console.print(f"1. Phase 1: System Preparation - Status: {status_p1}")
 
-    # --- Option 2: Basic Package Configuration (Phase 2) ---
-    status_p2 = "[yellow]Pending[/yellow]"
-    if full_setup_already_done or PHASE_2_BASIC_CONFIG_SUCCESS_SESSION:
-        status_p2 = "[green]✓ Done[/green]" if full_setup_already_done else "[cyan]✓ Done this session[/cyan]"
-    
-    can_run_p2 = PHASE_1_SYSTEM_PREP_SUCCESS_SESSION or full_setup_already_done
+    # --- Opzione 2: Fase 2 ---
+    status_p2 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 2 else "[yellow]Pending[/yellow]"
+    can_run_p2 = (LAST_COMPLETED_PHASE >= 1)
     p2_text = f"2. Phase 2: Basic Package Configuration - Status: {status_p2}"
-    if not can_run_p2 and not PHASE_2_BASIC_CONFIG_SUCCESS_SESSION and not full_setup_already_done:
+    if not can_run_p2 and LAST_COMPLETED_PHASE < 2:
         p2_text += " (Requires Phase 1 completion)"
     console.print(p2_text)
 
-    # --- Option 3: Advanced Configuration (Phase 3) & Finalize ---
-    status_p3 = "[yellow]Pending[/yellow]"
-    if full_setup_already_done or PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION:
-        status_p3 = "[green]✓ Done[/green]" if full_setup_already_done else "[cyan]✓ Done this session[/cyan]"
-
-    can_run_p3 = (PHASE_1_SYSTEM_PREP_SUCCESS_SESSION and PHASE_2_BASIC_CONFIG_SUCCESS_SESSION) or full_setup_already_done
+    # --- Opzione 3: Fase 3 & Finalize ---
+    status_p3 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 3 else "[yellow]Pending[/yellow]"
+    can_run_p3 = (LAST_COMPLETED_PHASE >= 2)
     p3_text = f"3. Phase 3: Advanced Configuration & Finalize Setup - Status: {status_p3}"
-    if not can_run_p3 and not PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION and not full_setup_already_done:
+    if not can_run_p3 and LAST_COMPLETED_PHASE < 3:
         p3_text += " (Requires Phase 1 & 2 completion)"
     console.print(p3_text)
     
     console.print("0. Exit")
-    console.print("-" * 70) # Aumentato per il testo più lungo
+    console.print("-" * 70)
 
     choices = ["0", "1"]
-    if can_run_p2: choices.append("2")
-    if can_run_p3: choices.append("3")
+    if can_run_p2 or LAST_COMPLETED_PHASE >= 2: choices.append("2")
+    if can_run_p3 or LAST_COMPLETED_PHASE >= 3: choices.append("3")
     
     valid_choices = sorted(list(set(choices)))
     default_choice = "0"
-    if "1" in valid_choices and not (PHASE_1_SYSTEM_PREP_SUCCESS_SESSION or full_setup_already_done) : default_choice = "1"
-    elif "2" in valid_choices and can_run_p2 and not (PHASE_2_BASIC_CONFIG_SUCCESS_SESSION or full_setup_already_done): default_choice = "2"
-    elif "3" in valid_choices and can_run_p3 and not (PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION or full_setup_already_done): default_choice = "3"
 
+    if "1" in valid_choices and LAST_COMPLETED_PHASE < 1: default_choice = "1"
+    elif "2" in valid_choices and can_run_p2 and LAST_COMPLETED_PHASE < 2: default_choice = "2"
+    elif "3" in valid_choices and can_run_p3 and LAST_COMPLETED_PHASE < 3: default_choice = "3"
+    
     choice = Prompt.ask("Enter your choice", choices=valid_choices, default=default_choice)
     return choice
 
-
 def run_phase_three_configuration_and_finalize():
     """
-    Placeholder for Phase Three (Advanced) configuration steps.
-    If successful, it then deploys user configs and creates the final marker.
-    Returns True if Phase 3 AND finalization steps were successful, False otherwise.
+    Runs Phase 3 logic, then deploys configs.
+    Updates LAST_COMPLETED_PHASE to 3 if all steps are successful.
+    Returns True if Phase 3 logic AND config deployment are successful.
     """
-    global PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION # Modifichiamo questo flag
-
     print_header("Phase 3: Advanced Configuration & Finalization")
     
-    # --- Inserisci qui la logica effettiva della Fase 3 ---
-    print_info("Executing advanced configuration steps for Phase 3...")
-    # Esempio:
-    # success_step1 = run_command(["some_advanced_command"])
-    # success_step2 = configure_something_else()
-    # if not (success_step1 and success_step2):
-    #     print_error("Some advanced configuration steps in Phase 3 failed.")
-    #     PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION = False
-    #     return False
+    phase_3_logic_successful = False
     
+    print_info("Executing advanced configuration steps for Phase 3...")
     print_success("Placeholder for Phase 3 advanced configuration steps completed successfully.")
-    # --- Fine della logica effettiva della Fase 3 ---
+    phase_3_logic_successful = True
 
-    PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION = True # Assume successo se arriviamo qui
+    if not phase_3_logic_successful:
+        print_error("Core logic for Phase 3 failed. Skipping config deployment and finalization.")
+        return False
 
-    # Ora, dopo il successo della Fase 3, procedi con la copia dei file e il marker finale
-    print_info("Phase 3 completed. Proceeding to deploy user configs and finalize setup.")
+    print_info("Phase 3 core logic completed. Proceeding to deploy user configs.")
     if deploy_user_configs():
-        if create_full_setup_marker_file():
-            print_success("Full setup including Phase 3 and config deployment is now complete!")
-            return True
-        else:
-            print_error("Failed to create the full setup completion marker file. The setup might be incomplete for future runs.")
-            # Anche se il marker fallisce, la fase 3 e la copia dei config potrebbero essere andate a buon fine
-            # Ma per lo stato generale, consideriamo questo un fallimento del "finalize"
-            return False # Fallimento della finalizzazione
+        print_success("Phase 3, including config deployment, is now complete!")
+        update_last_completed_phase(3)
+        return True
     else:
-        print_error("Failed to deploy user configuration files after Phase 3. The setup is not fully complete.")
-        return False # Fallimento della copia dei config
+        print_error("Failed to deploy user configuration files after Phase 3. Phase 3 is not fully complete.")
+        return False
 
 
 def main():
     """Main function to run the application."""
-    global PHASE_1_SYSTEM_PREP_SUCCESS_SESSION, PHASE_2_BASIC_CONFIG_SUCCESS_SESSION, PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION
+    global LAST_COMPLETED_PHASE
 
     logging.info("Application started.")
     print_with_emoji("🚀", "Application started.", "highlight")
@@ -308,7 +300,7 @@ def main():
         print_error("Critical Python dependencies are missing. Please install them and restart.")
         sys.exit(1)
 
-    full_setup_already_done = check_full_setup_marker_exists()
+    load_last_completed_phase() # Carica lo stato di avanzamento all'avvio
 
     if os.geteuid() != 0:
         print_warning("This application performs system-wide changes and requires root privileges.")
@@ -317,82 +309,55 @@ def main():
             sys.exit(0)
     
     while True:
-        # Aggiorna lo stato per il menu in base ai flag di sessione se il setup completo non è già fatto
-        # Questo permette al menu di riflettere i progressi *all'interno* di una sessione.
-        current_display_status_is_complete = full_setup_already_done or \
-                                             (PHASE_1_SYSTEM_PREP_SUCCESS_SESSION and \
-                                              PHASE_2_BASIC_CONFIG_SUCCESS_SESSION and \
-                                              PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION)
-
-        choice = display_menu(current_display_status_is_complete)
-
+        choice = display_menu()
 
         if choice == '1': # Phase 1: System Preparation
-            if full_setup_already_done:
-                print_info("Phase 1 was already part of a completed full setup.")
+            if LAST_COMPLETED_PHASE >= 1:
+                print_info("Phase 1 was previously completed.")
                 if Prompt.ask("Do you want to re-run Phase 1?", choices=["y","n"], default="n") == 'n':
                     Prompt.ask("\nPress Enter to return to the main menu...", default="")
                     continue
-            
+
             try:
                 if run_system_preparation():
-                    PHASE_1_SYSTEM_PREP_SUCCESS_SESSION = True
-                else:
-                    PHASE_1_SYSTEM_PREP_SUCCESS_SESSION = False # Resetta in caso di fallimento
+                    update_last_completed_phase(1)
+                # else: non decrementiamo LAST_COMPLETED_PHASE in caso di fallimento di una riesecuzione
             except Exception as e:
-                PHASE_1_SYSTEM_PREP_SUCCESS_SESSION = False
                 print_error(f"An unexpected error occurred during Phase 1: {e}")
                 logging.critical(f"Unhandled exception in run_system_preparation: {e}", exc_info=True)
             Prompt.ask("\nPress Enter to return to the main menu...", default="")
         
         elif choice == '2': # Phase 2: Basic Package Configuration
-            if full_setup_already_done:
-                print_info("Phase 2 was already part of a completed full setup.")
+            if LAST_COMPLETED_PHASE >= 2:
+                print_info("Phase 2 was previously completed.")
                 if Prompt.ask("Do you want to re-run Phase 2?", choices=["y","n"], default="n") == 'n':
                     Prompt.ask("\nPress Enter to return to the main menu...", default="")
                     continue
 
-            can_run_p2_now = PHASE_1_SYSTEM_PREP_SUCCESS_SESSION or full_setup_already_done
-            if not can_run_p2_now:
-                print_warning("Phase 1 (System Preparation) must be completed successfully first in this session.")
+            if LAST_COMPLETED_PHASE < 1:
+                print_warning("Phase 1 (System Preparation) must be completed first.")
             else:
                 try:
                     if run_basic_configuration():
-                        PHASE_2_BASIC_CONFIG_SUCCESS_SESSION = True
-                    else:
-                        PHASE_2_BASIC_CONFIG_SUCCESS_SESSION = False # Resetta
+                        update_last_completed_phase(2)
                 except Exception as e:
-                    PHASE_2_BASIC_CONFIG_SUCCESS_SESSION = False
                     print_error(f"An unexpected error occurred during Phase 2: {e}")
                     logging.critical(f"Unhandled exception in run_basic_configuration: {e}", exc_info=True)
             Prompt.ask("\nPress Enter to return to the main menu...", default="")
 
         elif choice == '3': # Phase 3: Advanced Configuration & Finalize
-            if full_setup_already_done:
-                print_info("Full setup (including Phase 3 and configs) was already completed.")
+            if LAST_COMPLETED_PHASE >= 3:
+                print_info("Phase 3 (Advanced Config & Finalize) was previously completed.")
                 if Prompt.ask("Do you want to re-run Phase 3 and config deployment?", choices=["y","n"], default="n") == 'n':
                     Prompt.ask("\nPress Enter to return to the main menu...", default="")
                     continue
-            
-            can_run_p3_now = (PHASE_1_SYSTEM_PREP_SUCCESS_SESSION and PHASE_2_BASIC_CONFIG_SUCCESS_SESSION) or full_setup_already_done
-            if not can_run_p3_now:
-                print_warning("Phase 1 and Phase 2 must be completed successfully first in this session.")
+
+            if LAST_COMPLETED_PHASE < 2:
+                print_warning("Phase 1 and Phase 2 must be completed first.")
             else:
                 try:
-                    if run_phase_three_configuration_and_finalize():
-                        # Il successo di PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION è gestito all'interno della funzione
-                        # E il marker file aggiorna lo stato 'full_setup_already_done'
-                        full_setup_already_done = check_full_setup_marker_exists() # Ricarica lo stato del marker
-                        if full_setup_already_done:
-                             print_success("Phase 3 and finalization completed successfully!")
-                        else:
-                            print_warning("Phase 3 and finalization steps had issues. Marker not created.")
-                    else:
-                        # PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION sarà False se la funzione ritorna False
-                        PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION = False # Assicura che sia False
-                        print_error("Phase 3 and/or finalization steps failed.")
+                    run_phase_three_configuration_and_finalize()
                 except Exception as e:
-                    PHASE_3_ADVANCED_CONFIG_SUCCESS_SESSION = False
                     print_error(f"An unexpected error occurred during Phase 3 or finalization: {e}")
                     logging.critical(f"Unhandled exception in Phase 3/Finalize: {e}", exc_info=True)
             Prompt.ask("\nPress Enter to return to the main menu...", default="")
@@ -415,6 +380,7 @@ if __name__ == "__main__":
         logging.warning("Application interrupted by user (KeyboardInterrupt).")
         sys.exit(0)
     except Exception as e:
-        console.print(f"\n[error]A critical unhandled error occurred in main: {e}[/error]")
+        escaped_error_message = Text.escape(str(e))
+        console.print(f"\n[error]A critical unhandled error occurred in main: {escaped_error_message}[/error]")
         logging.critical(f"Unhandled critical exception in main: {e}", exc_info=True)
         sys.exit(1)
