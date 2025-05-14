@@ -4,7 +4,7 @@ import subprocess
 import pwd
 from pathlib import Path
 from typing import List, Optional
-import logging as std_logging # Fallback logger, se shared_state.log non è ancora pronto
+import logging as std_logging
 
 from . import shared_state
 

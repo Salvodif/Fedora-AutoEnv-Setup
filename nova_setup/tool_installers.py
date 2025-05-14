@@ -122,7 +122,6 @@ def install_scripted_tools():
                 # Assicurati che il PATH sia comunque aggiunto se il tool è già installato ma il PATH manca
                 if name == "atuin":
                     _ensure_path_in_shell_rc(zshrc_user_path, f"$HOME/.atuin/bin", "Atuin")
-                # Zoxide gestisce il suo init in modo diverso (_ensure_zoxide_in_zshrc)
                 continue
             except Exception as e_v_check:
                 shared_state.log.debug(f"'{name}' found for {shared_state.TARGET_USER}, but version check failed: {e_v_check}. Reinstalling.")
