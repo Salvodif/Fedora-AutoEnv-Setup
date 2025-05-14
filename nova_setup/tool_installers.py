@@ -3,7 +3,9 @@ import pwd # Necessario per pwd.getpwnam
 import shutil
 import subprocess # Per CalledProcessError, FileNotFoundError, TimeoutExpired
 import shlex 
-
+  
+from pathlib import Path
+    
 from . import shared_state
 from . import utils as command_utils 
 
