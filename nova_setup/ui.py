@@ -10,9 +10,9 @@ from .package_manager import install_dnf_packages
 from .shell_customization import install_oh_my_zsh, install_omz_plugins, set_default_shell_to_zsh # Import aggiunto
 from .tool_installers import install_cargo_tools, install_scripted_tools
 from .config_files import copy_config_files
-from .gnome_manager import manage_gnome_extensions
+from .gnome_manager import manage_gnome_extensions_and_appearance
 from .post_install_checks import perform_post_install_checks
-from . import utils as command_utils # Importa command_utils per check_command_exists
+from . import utils as command_utils
 
 
 def initialize_script_logging_and_user():
@@ -114,7 +114,7 @@ def display_main_menu() -> bool:
     
     menu_options = {
         "1": ("Perform Initial Environment Setup", perform_initial_setup),
-        "2": ("Manage GNOME Shell Extensions", manage_gnome_extensions),
+        "2": ("Manage GNOME Shell Extensions", manage_gnome_extensions_and_appearance),
         "3": ("Exit Nova Setup", lambda: sys.exit(0))
     }
     main_menu_exit_flag = False
