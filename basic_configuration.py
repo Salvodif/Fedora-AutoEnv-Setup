@@ -3,8 +3,17 @@ import logging
 import os
 import shutil
 
-from myrich import console, print_info, print_warning, print_error, print_success, print_step, print_with_emoji
-from utils import run_command # Import from utils
+from myrich import (
+    console,
+    print_info,
+    print_warning,
+    print_error,
+    print_success,
+    print_step,
+    print_with_emoji,
+    print_header  # Assicurati che print_header sia qui
+)
+from utils import run_command
 
 # ... (PACKAGES_TO_INSTALL, CHROME_REPO_URL, CHROME_REPO_NAME remain the same) ...
 PACKAGES_TO_INSTALL = [
