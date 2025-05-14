@@ -91,7 +91,7 @@ alias top="btop"
 alias cat="bat"
 
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
-export PATH="$HOME/.atuin/bin:$PATH"
+export PATH="$HOME/.cargo/bin/atuin:$PATH"
 
 
 eval "$(zoxide init --cmd cd zsh)"
