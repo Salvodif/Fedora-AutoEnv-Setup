@@ -3,7 +3,10 @@ import logging
 import os
 import shutil
 
-from myrich import console, print_info, print_warning, print_error, print_success, print_step, print_header
+from myrich import (
+    console, print_info, print_warning, print_error, print_success,
+    print_step, print_header
+)
 from utils import run_command # Use the shared utility
 
 DNF_CONF_PATH = "/etc/dnf/dnf.conf"
