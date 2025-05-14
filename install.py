@@ -1,3 +1,4 @@
+# install.py
 import logging
 import sys
 import os
@@ -7,6 +8,7 @@ from pathlib import Path
 import json
 
 from rich.text import Text
+from rich.markup import escape as escape_markup
 
 try:
     from importlib.metadata import DistributionNotFound, version as get_version
@@ -23,13 +25,15 @@ from myrich import (
 )
 from system_preparation import run_system_preparation # Fase 1
 from basic_configuration import run_basic_configuration # Fase 2
+# MODIFIED: Import Phase 4 (Phase 3's logic is embedded)
+from terminal_enhancement import run_terminal_enhancement 
 
 # --- Constants ---
 LOG_FILE = "app.log"
 REQUIREMENTS_FILE = "requirements.txt"
 SCRIPT_DIR = Path(__file__).resolve().parent
-CONFIG_SOURCE_DIR_ZSH = SCRIPT_DIR / "zsh"
-CONFIG_SOURCE_DIR_NANO = SCRIPT_DIR / "nano"
+# CONFIG_SOURCE_DIR_ZSH = SCRIPT_DIR / "zsh" # Not directly used here, but in deploy_user_configs
+# CONFIG_SOURCE_DIR_NANO = SCRIPT_DIR / "nano" # Not directly used here, but in deploy_user_configs
 
 STATUS_FILE_NAME = "setup_progress.json"
 STATUS_FILE_PATH = SCRIPT_DIR / STATUS_FILE_NAME
@@ -37,6 +41,7 @@ STATUS_FILE_PATH = SCRIPT_DIR / STATUS_FILE_NAME
 STATUS_KEY_LAST_COMPLETED_PHASE = "last_completed_phase"
 
 LAST_COMPLETED_PHASE = 0
+MAX_INITIAL_PHASES = 4 # Phase 1, 2, 3 (Advanced Config + Deploy), 4 (Terminal)
 
 
 # --- Logging Setup ---
@@ -56,26 +61,24 @@ def load_last_completed_phase():
                 status_data = json.load(f)
                 LAST_COMPLETED_PHASE = status_data.get(STATUS_KEY_LAST_COMPLETED_PHASE, 0)
             print_info(f"Loaded setup progress from {STATUS_FILE_NAME}: Last completed phase = {LAST_COMPLETED_PHASE}")
-        except (json.JSONDecodeError, TypeError) as e: # TypeError se il file è vuoto o malformato
+        except (json.JSONDecodeError, TypeError) as e: 
             print_error(f"Error decoding {STATUS_FILE_NAME} or key missing: {e}. Resetting progress to 0.")
             logging.error(f"Error in {STATUS_FILE_NAME} (or key missing): {e}. Resetting to 0.", exc_info=True)
             LAST_COMPLETED_PHASE = 0
-            save_last_completed_phase()
-        except Exception as e:
-            print_error(f"Unexpected error loading {STATUS_FILE_NAME}: {e}. Resetting progress to 0.")
-            logging.error(f"Unexpected error loading status file {STATUS_FILE_NAME}: {e}", exc_info=True)
-            LAST_COMPLETED_PHASE = 0
+            # save_last_completed_phase() # Avoid recursive call if save fails
     else:
         print_info(f"{STATUS_FILE_NAME} not found. Initializing progress: Last completed phase = 0.")
         LAST_COMPLETED_PHASE = 0
-        save_last_completed_phase()
+    # Always attempt to save, ensuring the file exists if it didn't, or reflects a reset.
+    save_last_completed_phase()
+
 
 def save_last_completed_phase():
     """Salva l'ultima fase completata corrente nel file JSON."""
     try:
         with open(STATUS_FILE_PATH, "w") as f:
             json.dump({STATUS_KEY_LAST_COMPLETED_PHASE: LAST_COMPLETED_PHASE}, f, indent=4)
-        print_info(f"Saved setup progress to {STATUS_FILE_NAME}: Last completed phase = {LAST_COMPLETED_PHASE}")
+        # print_info(f"Saved setup progress to {STATUS_FILE_NAME}: Last completed phase = {LAST_COMPLETED_PHASE}")
     except Exception as e:
         print_error(f"Failed to save setup progress to {STATUS_FILE_NAME}: {e}")
         logging.error(f"Failed to save status file {STATUS_FILE_NAME}: {e}", exc_info=True)
@@ -121,6 +124,11 @@ def check_python_requirements():
         print_error(f"{REQUIREMENTS_FILE} not found. Cannot check Python dependencies.")
         logging.error(f"{REQUIREMENTS_FILE} not found.")
         return False
+    
+    if not requirements_list: # No requirements listed
+        print_info(f"{REQUIREMENTS_FILE} is empty or contains no active requirements.")
+        return True
+        
     missing_packages = []
     installed_ok_count = 0
     for req_str in requirements_list:
@@ -158,29 +166,35 @@ def check_python_requirements():
         print_info(f"Please install them, e.g., using: pip install -r {REQUIREMENTS_FILE}")
         logging.error(f"Missing Python requirements: {', '.join(missing_packages)}")
         return False
-    if installed_ok_count > 0 or not requirements_list: 
-        print_success("Python requirements check passed.")
+    
+    print_success("Python requirements check passed.")
     return True
 
 def deploy_user_configs():
-    print_step("Final Config Deployment", "Deploying user configuration files .zshrc and .nanorc")
+    """Deploys user configuration files (.zshrc, .nanorc) to USER_HOME_DIR."""
+    print_step("Config Deployment", "Deploying user configuration files .zshrc and .nanorc")
     if not USER_HOME_DIR or not USER_HOME_DIR.is_dir():
         print_error(f"User home directory '{USER_HOME_DIR}' not found or invalid. Cannot deploy configs.")
         logging.error(f"User home directory {USER_HOME_DIR} invalid for config deployment.")
         return False
+    
     print_info(f"Target user home directory for configs: {USER_HOME_DIR}")
     all_copied_successfully = True
+    
+    # Define source files relative to SCRIPT_DIR and their destination names
     configs_to_deploy = {
-        "zsh/.zshrc": USER_HOME_DIR / ".zshrc",
-        "nano/.nanorc": USER_HOME_DIR / ".nanorc"
+        SCRIPT_DIR / "zsh" / ".zshrc": USER_HOME_DIR / ".zshrc",
+        SCRIPT_DIR / "nano" / ".nanorc": USER_HOME_DIR / ".nanorc"
     }
-    for src_rel_path, dest_path in configs_to_deploy.items():
-        source_file = SCRIPT_DIR / src_rel_path
+
+    for source_file, dest_path in configs_to_deploy.items():
         if source_file.exists():
             try:
-                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                dest_path.parent.mkdir(parents=True, exist_ok=True) # Ensure parent dir exists
                 shutil.copy2(source_file, dest_path)
                 print_success(f"Copied '{source_file.name}' to '{dest_path}'")
+                
+                # Attempt to chown if running as root and SUDO_USER is set
                 sudo_uid_str = os.environ.get('SUDO_UID')
                 sudo_gid_str = os.environ.get('SUDO_GID')
                 if sudo_uid_str and sudo_gid_str and os.geteuid() == 0:
@@ -190,7 +204,7 @@ def deploy_user_configs():
                         os.chown(dest_path, sudo_uid, sudo_gid)
                         print_info(f"Set ownership of '{dest_path.name}' to user ID {sudo_uid}, group ID {sudo_gid}.")
                     except ValueError:
-                        print_warning(f"SUDO_UID ('{sudo_uid_str}') or SUDO_GID ('{sudo_gid_str}') is not a valid integer. Cannot chown.")
+                        print_warning(f"SUDO_UID ('{sudo_uid_str}') or SUDO_GID ('{sudo_gid_str}') is not a valid integer. Cannot chown '{dest_path.name}'.")
                         logging.warning(f"Invalid SUDO_UID/GID for chown: {sudo_uid_str}/{sudo_gid_str}")
                     except Exception as e_chown:
                         print_warning(f"Could not chown '{dest_path}': {e_chown}")
@@ -202,79 +216,33 @@ def deploy_user_configs():
         else:
             print_warning(f"Source file '{source_file}' not found. Skipping deployment of {source_file.name}.")
             logging.warning(f"Source file not found: {source_file}")
-            all_copied_successfully = False
+            all_copied_successfully = False # Consider this a failure for this specific file
+
     if all_copied_successfully:
-        print_success("All user configuration files (.zshrc, .nanorc) deployed successfully.")
+        print_success("All specified user configuration files deployed successfully.")
     else:
-        print_warning("Some user configuration files (.zshrc, .nanorc) could not be deployed.")
+        print_warning("Some user configuration files could not be deployed. Check messages above.")
     return all_copied_successfully
 
 
-def display_menu():
-    """Displays the main menu based on LAST_COMPLETED_PHASE."""
-    print_header("Main Menu - System Setup Utility")
-    console.print(f"Target user for configs: {os.environ.get('SUDO_USER', os.getlogin())} (Home: {USER_HOME_DIR})")
-
-    MAX_INITIAL_PHASES = 3
-    is_full_initial_setup_done = (LAST_COMPLETED_PHASE >= MAX_INITIAL_PHASES)
-
-    if is_full_initial_setup_done:
-        console.print("[green bold]INFO: Full Initial Setup (All Phases) was previously completed.[/green]")
-        console.print("You can choose to re-run phases if needed.")
-
-    console.print("Choose an option:")
-
-    # --- Opzione 1: Fase 1 ---
-    status_p1 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 1 else "[yellow]Pending[/yellow]"
-    console.print(f"1. Phase 1: System Preparation - Status: {status_p1}")
-
-    # --- Opzione 2: Fase 2 ---
-    status_p2 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 2 else "[yellow]Pending[/yellow]"
-    can_run_p2 = (LAST_COMPLETED_PHASE >= 1)
-    p2_text = f"2. Phase 2: Basic Package Configuration - Status: {status_p2}"
-    if not can_run_p2 and LAST_COMPLETED_PHASE < 2:
-        p2_text += " (Requires Phase 1 completion)"
-    console.print(p2_text)
-
-    # --- Opzione 3: Fase 3 & Finalize ---
-    status_p3 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 3 else "[yellow]Pending[/yellow]"
-    can_run_p3 = (LAST_COMPLETED_PHASE >= 2)
-    p3_text = f"3. Phase 3: Advanced Configuration & Finalize Setup - Status: {status_p3}"
-    if not can_run_p3 and LAST_COMPLETED_PHASE < 3:
-        p3_text += " (Requires Phase 1 & 2 completion)"
-    console.print(p3_text)
-    
-    console.print("0. Exit")
-    console.print("-" * 70)
-
-    choices = ["0", "1"]
-    if can_run_p2 or LAST_COMPLETED_PHASE >= 2: choices.append("2")
-    if can_run_p3 or LAST_COMPLETED_PHASE >= 3: choices.append("3")
-    
-    valid_choices = sorted(list(set(choices)))
-    default_choice = "0"
-
-    if "1" in valid_choices and LAST_COMPLETED_PHASE < 1: default_choice = "1"
-    elif "2" in valid_choices and can_run_p2 and LAST_COMPLETED_PHASE < 2: default_choice = "2"
-    elif "3" in valid_choices and can_run_p3 and LAST_COMPLETED_PHASE < 3: default_choice = "3"
-    
-    choice = Prompt.ask("Enter your choice", choices=valid_choices, default=default_choice)
-    return choice
-
-def run_phase_three_configuration_and_finalize():
+def run_phase_three_advanced_config_and_finalize():
     """
-    Runs Phase 3 logic, then deploys configs.
+    Runs Phase 3 logic (placeholder for now), then deploys configs.
     Updates LAST_COMPLETED_PHASE to 3 if all steps are successful.
     Returns True if Phase 3 logic AND config deployment are successful.
     """
     print_header("Phase 3: Advanced Configuration & Finalization")
     
-    phase_3_logic_successful = False
+    phase_3_logic_successful = True # Start optimistic
     
-    print_info("Executing advanced configuration steps for Phase 3...")
-    print_success("Placeholder for Phase 3 advanced configuration steps completed successfully.")
-    phase_3_logic_successful = True
-
+    # --- Placeholder for actual Phase 3 Advanced Configuration ---
+    print_info("Executing advanced configuration steps for Phase 3 (if any)...")
+    # Example: You might add systemd service enabling, firewall rules, etc. here.
+    # For now, it's just a placeholder.
+    # if not some_advanced_config_function():
+    #     phase_3_logic_successful = False
+    #     print_error("An advanced configuration step in Phase 3 failed.")
+    
     if not phase_3_logic_successful:
         print_error("Core logic for Phase 3 failed. Skipping config deployment and finalization.")
         return False
@@ -288,6 +256,64 @@ def run_phase_three_configuration_and_finalize():
         print_error("Failed to deploy user configuration files after Phase 3. Phase 3 is not fully complete.")
         return False
 
+def display_menu():
+    """Displays the main menu based on LAST_COMPLETED_PHASE."""
+    print_header("Main Menu - System Setup Utility")
+    console.print(f"Target user for configs: {os.environ.get('SUDO_USER', os.getlogin())} (Home: {USER_HOME_DIR})")
+
+    is_full_initial_setup_done = (LAST_COMPLETED_PHASE >= MAX_INITIAL_PHASES)
+
+    if is_full_initial_setup_done:
+        console.print("[green bold]INFO: Full Initial Setup (All Phases) was previously completed.[/]")
+
+    console.print("Choose an option:")
+
+    status_p1 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 1 else "[yellow]Pending[/yellow]"
+    console.print(f"1. Phase 1: System Preparation - Status: {status_p1}")
+
+    status_p2 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 2 else "[yellow]Pending[/yellow]"
+    can_run_p2 = (LAST_COMPLETED_PHASE >= 1)
+    p2_text = f"2. Phase 2: Basic Package Configuration - Status: {status_p2}"
+    if not can_run_p2 and LAST_COMPLETED_PHASE < 2:
+        p2_text += " (Requires Phase 1)"
+    console.print(p2_text)
+
+    status_p3 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 3 else "[yellow]Pending[/yellow]"
+    can_run_p3 = (LAST_COMPLETED_PHASE >= 2)
+    p3_text = f"3. Phase 3: Advanced Config & Finalize - Status: {status_p3}"
+    if not can_run_p3 and LAST_COMPLETED_PHASE < 3:
+        p3_text += " (Requires Phase 2)"
+    console.print(p3_text)
+    
+    status_p4 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 4 else "[yellow]Pending[/yellow]"
+    can_run_p4 = (LAST_COMPLETED_PHASE >= 2) # Depends on cargo from Phase 2
+    p4_text = f"4. Phase 4: Terminal Enhancement - Status: {status_p4}"
+    if not can_run_p4 and LAST_COMPLETED_PHASE < 4:
+        p4_text += " (Requires Phase 2)"
+    console.print(p4_text)
+
+    console.print("0. Exit")
+    console.print("-" * 70)
+
+    choices = ["0", "1"]
+    if can_run_p2 or LAST_COMPLETED_PHASE >= 2: choices.append("2")
+    if can_run_p3 or LAST_COMPLETED_PHASE >= 3: choices.append("3")
+    if can_run_p4 or LAST_COMPLETED_PHASE >= 4: choices.append("4")
+    
+    valid_choices = sorted(list(set(choices)))
+    default_choice = "0"
+
+    if "1" in valid_choices and LAST_COMPLETED_PHASE < 1: default_choice = "1"
+    elif "2" in valid_choices and can_run_p2 and LAST_COMPLETED_PHASE < 2: default_choice = "2"
+    elif LAST_COMPLETED_PHASE == 2:
+        if "3" in valid_choices and can_run_p3 and LAST_COMPLETED_PHASE < 3: default_choice = "3"
+        elif "4" in valid_choices and can_run_p4 and LAST_COMPLETED_PHASE < 4: default_choice = "4"
+    elif "3" in valid_choices and can_run_p3 and LAST_COMPLETED_PHASE < 3: default_choice = "3"
+    elif "4" in valid_choices and can_run_p4 and LAST_COMPLETED_PHASE < 4: default_choice = "4"
+    
+    choice = Prompt.ask("Enter your choice", choices=valid_choices, default=default_choice)
+    return choice
+
 
 def main():
     """Main function to run the application."""
@@ -300,42 +326,42 @@ def main():
         print_error("Critical Python dependencies are missing. Please install them and restart.")
         sys.exit(1)
 
-    load_last_completed_phase() # Carica lo stato di avanzamento all'avvio
+    load_last_completed_phase() 
 
     if os.geteuid() != 0:
-        print_warning("This application performs system-wide changes and requires root privileges.")
-        if not Prompt.ask("The script is not running as root (sudo). Most operations will fail. Continue for menu display only?", choices=["y", "n"], default="n") == "y":
-            print_info("Exiting. Please run with 'sudo python3 install.py'")
+        print_warning("This application performs system-wide changes and requires root privileges for many phases.")
+        if not Prompt.ask("The script is not running as root (sudo). Some operations will fail. Continue for menu display and user-specific phases (if applicable)?", choices=["y", "n"], default="n") == "y":
+            print_info("Exiting. Please run with 'sudo python3 install.py' for full functionality.")
             sys.exit(0)
     
     while True:
         choice = display_menu()
 
         if choice == '1': # Phase 1: System Preparation
-            if LAST_COMPLETED_PHASE >= 1:
-                print_info("Phase 1 was previously completed.")
-                if Prompt.ask("Do you want to re-run Phase 1?", choices=["y","n"], default="n") == 'n':
-                    Prompt.ask("\nPress Enter to return to the main menu...", default="")
-                    continue
-
-            try:
-                if run_system_preparation():
-                    update_last_completed_phase(1)
-                # else: non decrementiamo LAST_COMPLETED_PHASE in caso di fallimento di una riesecuzione
-            except Exception as e:
-                print_error(f"An unexpected error occurred during Phase 1: {e}")
-                logging.critical(f"Unhandled exception in run_system_preparation: {e}", exc_info=True)
-            Prompt.ask("\nPress Enter to return to the main menu...", default="")
+            if LAST_COMPLETED_PHASE >= 1 and \
+               Prompt.ask("Phase 1 was previously completed. Re-run?", choices=["y","n"], default="n") == 'n':
+                Prompt.ask("\nPress Enter to return to menu...", default="", show_default=False)
+                continue
+            if os.geteuid() != 0:
+                print_error("Phase 1 requires root privileges. Please run with sudo.")
+            else:
+                try:
+                    if run_system_preparation():
+                        update_last_completed_phase(1)
+                except Exception as e:
+                    print_error(f"An unexpected error occurred during Phase 1: {e}")
+                    logging.critical(f"Unhandled exception in run_system_preparation: {e}", exc_info=True)
+            Prompt.ask("\nPress Enter to return to menu...", default="", show_default=False)
         
         elif choice == '2': # Phase 2: Basic Package Configuration
-            if LAST_COMPLETED_PHASE >= 2:
-                print_info("Phase 2 was previously completed.")
-                if Prompt.ask("Do you want to re-run Phase 2?", choices=["y","n"], default="n") == 'n':
-                    Prompt.ask("\nPress Enter to return to the main menu...", default="")
-                    continue
-
+            if LAST_COMPLETED_PHASE >= 2 and \
+               Prompt.ask("Phase 2 was previously completed. Re-run?", choices=["y","n"], default="n") == 'n':
+                Prompt.ask("\nPress Enter to return to menu...", default="", show_default=False)
+                continue
             if LAST_COMPLETED_PHASE < 1:
                 print_warning("Phase 1 (System Preparation) must be completed first.")
+            elif os.geteuid() != 0:
+                print_error("Phase 2 requires root privileges. Please run with sudo.")
             else:
                 try:
                     if run_basic_configuration():
@@ -343,24 +369,42 @@ def main():
                 except Exception as e:
                     print_error(f"An unexpected error occurred during Phase 2: {e}")
                     logging.critical(f"Unhandled exception in run_basic_configuration: {e}", exc_info=True)
-            Prompt.ask("\nPress Enter to return to the main menu...", default="")
+            Prompt.ask("\nPress Enter to return to menu...", default="", show_default=False)
 
         elif choice == '3': # Phase 3: Advanced Configuration & Finalize
-            if LAST_COMPLETED_PHASE >= 3:
-                print_info("Phase 3 (Advanced Config & Finalize) was previously completed.")
-                if Prompt.ask("Do you want to re-run Phase 3 and config deployment?", choices=["y","n"], default="n") == 'n':
-                    Prompt.ask("\nPress Enter to return to the main menu...", default="")
-                    continue
-
+            if LAST_COMPLETED_PHASE >= 3 and \
+               Prompt.ask("Phase 3 was previously completed. Re-run?", choices=["y","n"], default="n") == 'n':
+                Prompt.ask("\nPress Enter to return to menu...", default="", show_default=False)
+                continue
             if LAST_COMPLETED_PHASE < 2:
-                print_warning("Phase 1 and Phase 2 must be completed first.")
+                print_warning("Phase 1 and Phase 2 must be completed before Phase 3.")
+            # Some parts of Phase 3 might need root (advanced sys config, chown in deploy)
+            # The deploy_user_configs function itself handles chown if root
             else:
                 try:
-                    run_phase_three_configuration_and_finalize()
+                    if run_phase_three_advanced_config_and_finalize():
+                         update_last_completed_phase(3)
                 except Exception as e:
-                    print_error(f"An unexpected error occurred during Phase 3 or finalization: {e}")
-                    logging.critical(f"Unhandled exception in Phase 3/Finalize: {e}", exc_info=True)
-            Prompt.ask("\nPress Enter to return to the main menu...", default="")
+                    print_error(f"An unexpected error occurred during Phase 3: {e}")
+                    logging.critical(f"Unhandled exception in Phase 3: {e}", exc_info=True)
+            Prompt.ask("\nPress Enter to return to menu...", default="", show_default=False)
+
+        elif choice == '4': # Phase 4: Terminal Enhancement
+            if LAST_COMPLETED_PHASE >= 4 and \
+               Prompt.ask("Phase 4 was previously completed. Re-run?", choices=["y","n"], default="n") == 'n':
+                Prompt.ask("\nPress Enter to return to menu...", default="", show_default=False)
+                continue
+            if LAST_COMPLETED_PHASE < 2: # Depends on Phase 2 for 'cargo'
+                print_warning("Phase 1 and Phase 2 must be completed before Phase 4.")
+            # run_terminal_enhancement handles user context (sudo -u) if script is root
+            else:
+                try:
+                    if run_terminal_enhancement():
+                        update_last_completed_phase(4)
+                except Exception as e:
+                    print_error(f"An unexpected error occurred during Phase 4: {e}")
+                    logging.critical(f"Unhandled exception in run_terminal_enhancement: {e}", exc_info=True)
+            Prompt.ask("\nPress Enter to return to menu...", default="", show_default=False)
         
         elif choice == '0': # Exit
             print_success("Exiting application. Goodbye!")
@@ -380,7 +424,7 @@ if __name__ == "__main__":
         logging.warning("Application interrupted by user (KeyboardInterrupt).")
         sys.exit(0)
     except Exception as e:
-        escaped_error_message = Text.escape(str(e))
+        escaped_error_message = escape_markup(str(e))
         console.print(f"\n[error]A critical unhandled error occurred in main: {escaped_error_message}[/error]")
         logging.critical(f"Unhandled critical exception in main: {e}", exc_info=True)
         sys.exit(1)
