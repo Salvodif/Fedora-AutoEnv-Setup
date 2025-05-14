@@ -10,10 +10,19 @@ import pkg_resources
 
 from rich.prompt import Prompt
 
-from myrich import console, print_header, print_info, print_error, print_success, print_with_emoji
+from myrich import (
+    console,
+    print_header,
+    print_info,
+    print_error,
+    print_success,
+    print_with_emoji,
+    print_warning,  # Aggiungi print_warning qui
+    print_step      # Aggiungi print_step se usato direttamente in install.py (usato in deploy_user_configs)
+)
+
 from system_preparation import run_system_preparation
 from basic_configuration import run_basic_configuration
-# utils.py is used by system_preparation and basic_configuration
 
 # --- Constants ---
 LOG_FILE = "app.log"
