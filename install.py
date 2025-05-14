@@ -286,10 +286,12 @@ def display_menu():
     console.print(p3_text)
     
     status_p4 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 4 else "[yellow]Pending[/yellow]"
-    can_run_p4 = (LAST_COMPLETED_PHASE >= 2) # Depends on cargo from Phase 2
+    # --- MODIFIED: Phase 4 now depends on Phase 3 completion ---
+    can_run_p4 = (LAST_COMPLETED_PHASE >= 3) 
     p4_text = f"4. Phase 4: Terminal Enhancement - Status: {status_p4}"
     if not can_run_p4 and LAST_COMPLETED_PHASE < 4:
-        p4_text += " (Requires Phase 2)"
+        # Also implicitly depends on Phase 2 for cargo, but Phase 3 depends on 2, so this covers it.
+        p4_text += " (Requires Phase 3 completion)" 
     console.print(p4_text)
 
     console.print("0. Exit")
@@ -298,16 +300,15 @@ def display_menu():
     choices = ["0", "1"]
     if can_run_p2 or LAST_COMPLETED_PHASE >= 2: choices.append("2")
     if can_run_p3 or LAST_COMPLETED_PHASE >= 3: choices.append("3")
-    if can_run_p4 or LAST_COMPLETED_PHASE >= 4: choices.append("4")
+    # --- MODIFIED: Add choice 4 only if it can be run or is already done ---
+    if can_run_p4 or LAST_COMPLETED_PHASE >= 4: choices.append("4") 
     
     valid_choices = sorted(list(set(choices)))
     default_choice = "0"
 
+    # --- MODIFIED: Default choice logic to reflect new dependency for Phase 4 ---
     if "1" in valid_choices and LAST_COMPLETED_PHASE < 1: default_choice = "1"
     elif "2" in valid_choices and can_run_p2 and LAST_COMPLETED_PHASE < 2: default_choice = "2"
-    elif LAST_COMPLETED_PHASE == 2:
-        if "3" in valid_choices and can_run_p3 and LAST_COMPLETED_PHASE < 3: default_choice = "3"
-        elif "4" in valid_choices and can_run_p4 and LAST_COMPLETED_PHASE < 4: default_choice = "4"
     elif "3" in valid_choices and can_run_p3 and LAST_COMPLETED_PHASE < 3: default_choice = "3"
     elif "4" in valid_choices and can_run_p4 and LAST_COMPLETED_PHASE < 4: default_choice = "4"
     
@@ -378,8 +379,6 @@ def main():
                 continue
             if LAST_COMPLETED_PHASE < 2:
                 print_warning("Phase 1 and Phase 2 must be completed before Phase 3.")
-            # Some parts of Phase 3 might need root (advanced sys config, chown in deploy)
-            # The deploy_user_configs function itself handles chown if root
             else:
                 try:
                     if run_phase_three_advanced_config_and_finalize():
@@ -394,9 +393,10 @@ def main():
                Prompt.ask("Phase 4 was previously completed. Re-run?", choices=["y","n"], default="n") == 'n':
                 Prompt.ask("\nPress Enter to return to menu...", default="", show_default=False)
                 continue
-            if LAST_COMPLETED_PHASE < 2: # Depends on Phase 2 for 'cargo'
-                print_warning("Phase 1 and Phase 2 must be completed before Phase 4.")
-            # run_terminal_enhancement handles user context (sudo -u) if script is root
+
+            # --- MODIFIED: Check dependency on Phase 3 completion ---
+            if LAST_COMPLETED_PHASE < 3: 
+                print_warning("Phase 3 (Advanced Config & Finalize) must be completed before Phase 4.")
             else:
                 try:
                     if run_terminal_enhancement():
