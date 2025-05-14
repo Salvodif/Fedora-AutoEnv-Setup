@@ -14,7 +14,7 @@ from utils import run_command
 PACKAGES_TO_INSTALL = [
     "git", "curl", "cargo", "zsh", "python3", "python3-pip",
     "stow", "dnf-plugins-core", "powerline-fonts", "btop",
-    "bat", "fzf", "google-chrome-stable"
+    "bat", "fzf", "google-chrome-stable", "steam"
 ]
 
 # Google Chrome repo details
