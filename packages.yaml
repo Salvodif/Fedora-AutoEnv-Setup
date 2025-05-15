@@ -12,7 +12,7 @@ phase2_basic_configuration:
   dnf_packages:
     - "git"
     - "curl"
-    - "cargo" # For Starship and other Rust tools
+    - "cargo"
     - "zsh"
     - "python3"
     - "python3-pip"

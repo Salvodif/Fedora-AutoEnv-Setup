@@ -5,18 +5,11 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Callable, Optional
 
-# Assuming scripts are in a 'scripts' subdirectory
-# and this install.py is in the parent directory of 'scripts'
-try:
-    from scripts import console_output as con
-    from scripts import config_loader
-except ImportError:
-    # This allows running the script from the project root directory
-    # without having to install the package or modify PYTHONPATH.
-    # It assumes 'scripts' is a subdirectory of the current working directory.
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from scripts import console_output as con
-    from scripts import config_loader
+from scripts import console_output as con
+from scripts import config_loader
+from scripts import phase1_system_preparation
+from scripts import phase2_basic_installation
+
 
 # --- Constants ---
 STATUS_FILE_NAME = "install_status.json"
@@ -29,13 +22,13 @@ PHASES = {
         "name": "Phase 1: System Preparation",
         "description": "Initial system checks and dnf5 setup.",
         "dependencies": [],
-        "handler": lambda: run_phase_placeholder("phase1_system_preparation") # Placeholder
+        "handler": phase1_system_preparation.run_phase1
     },
     "phase2_basic_configuration": {
         "name": "Phase 2: Basic System Package Configuration",
         "description": "Install essential CLI tools, Python, Zsh, etc.",
         "dependencies": ["phase1_system_preparation"],
-        "handler": lambda: run_phase_placeholder("phase2_basic_configuration") # Placeholder
+        "handler": phase2_basic_installation.run_phase2
     },
     "phase3_terminal_enhancement": {
         "name": "Phase 3: Terminal Enhancement",
