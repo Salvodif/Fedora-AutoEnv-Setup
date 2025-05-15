@@ -5,11 +5,11 @@ import logging
 
 from rich.prompt import Prompt
 
-from myrich import (
+from scripts.myrich import (
     console, print_info, print_error, print_success,
     print_step, print_header, print_warning
 )
-from utils import run_command
+from scripts.utils import run_command
 
 def _check_root_privileges():
     if os.geteuid() != 0:

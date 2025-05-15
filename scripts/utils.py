@@ -1,7 +1,7 @@
 # utils.py
 import subprocess
 import logging
-from myrich import console, print_info, print_error # Assuming myrich is in the same path
+from scripts.myrich import console, print_info, print_error # Assuming myrich is in the same path
 
 def run_command(command: list[str],
                 check: bool = True,

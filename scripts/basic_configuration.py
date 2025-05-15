@@ -4,11 +4,11 @@ import os
 import shutil
 from pathlib import Path # Aggiunto per la gestione dei percorsi
 
-from myrich import (
+from scripts.myrich import (
     console, print_info, print_warning, print_error, print_success,
     print_step, print_with_emoji, print_header
 )
-from utils import run_command
+from scripts.utils import run_command
 
 # List of packages to be installed
 PACKAGES_TO_INSTALL = [

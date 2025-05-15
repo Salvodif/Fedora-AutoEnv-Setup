@@ -5,11 +5,11 @@ import shutil
 
 from rich.prompt import Prompt
 
-from myrich import (
+from scripts.myrich import (
     console, print_info, print_warning, print_error, print_success,
     print_step, print_header
 )
-from utils import run_command
+from scripts.utils import run_command
 
 DNF_CONF_PATH = "/etc/dnf/dnf.conf"
 DNF_SETTINGS = {

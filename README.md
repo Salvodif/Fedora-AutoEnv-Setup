@@ -60,13 +60,27 @@ The `install.py` script is designed to take a fresh Fedora installation and conf
 ## 📁 Repository Structure
 ```markdown
 .
-├── install.py # The main Python setup script
-├── zsh/
-│ └── .zshrc # Source Zsh configuration (deployed by install.py)
-├── nano/
-│ └── .nanorc # Source Nano configuration (deployed by install.py)
-├── LICENSE # The MIT License file for this project
-└── README.md # This file
+├── .gitignore                 # Files and directories to be ignored by Git (e.g., __pycache__, .venv)
+├── LICENSE                    # Your project's license (already present)
+├── README.md                  # Project description, how to use it, prerequisites (already present)
+├── TODO.md                    # Your TODO list (already present, but consider GitHub Issues for more robust tracking)
+├── requirements.txt           # Python dependencies (already present)
+│
+├── install.py                 # Main script for installation/orchestration
+│
+├── configs/                   # Directory for specific configuration files
+│   ├── nano/                  # Configurations for Nano (already present as a folder)
+│   │   └── ...                # (e.g., nanorc or snippets)
+│   └── zsh/                   # Configurations for Zsh (already present as a folder)
+│       └── ...                # (e.g., .zshrc, aliases, functions, themes)
+│
+├── scripts/                   # Auxiliary scripts or specific modules
+│   ├── basic_configuration.py # Script for basic system/tool configurations
+│   ├── myrich.py              # Script related to "rich" (likely the Python library for rich text in terminals)
+│   ├── nvidia_installation.py # Script for NVIDIA driver/toolkit installation
+│   ├── system_preparation.py  # Script for general system preparation tasks
+│   ├── terminal_enhancement.py# Script for terminal enhancements
+│   └── utils.py               # Utility functions used by other scripts
 ```
 
 

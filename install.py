@@ -19,7 +19,7 @@ except ImportError:
 
 from rich.prompt import Prompt
 
-from myrich import (
+from scripts.myrich import (
     console, print_header, print_info, print_error, print_success,
     print_with_emoji, print_warning, print_step
 )
