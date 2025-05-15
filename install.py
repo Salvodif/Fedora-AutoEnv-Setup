@@ -23,10 +23,12 @@ from scripts.myrich import (
     console, print_header, print_info, print_error, print_success,
     print_with_emoji, print_warning, print_step
 )
-from system_preparation import run_system_preparation # Fase 1
-from basic_configuration import run_basic_configuration # Fase 2
-from terminal_enhancement import run_terminal_enhancement # Fase 4 (Fase 3 logic is embedded)
-from nvidia_installation import run_nvidia_driver_installation # Fase 5
+from scripts.system_preparation import run_system_preparation # Phase 1
+from scripts.basic_configuration import run_basic_configuration # Phase 2
+from scripts.gnome_configuration import run_gnome_configuration # Phase 3 (NEW)
+
+from scripts.terminal_enhancement import run_terminal_enhancement # Phase 5 (Old Phase 4)
+from scripts.nvidia_installation import run_nvidia_driver_installation # Phase 6 (Old Phase 5)
 
 # --- Constants ---
 LOG_FILE = "app.log"
@@ -39,7 +41,8 @@ STATUS_FILE_PATH = SCRIPT_DIR / STATUS_FILE_NAME
 STATUS_KEY_LAST_COMPLETED_PHASE = "last_completed_phase"
 
 LAST_COMPLETED_PHASE = 0
-MAX_INITIAL_PHASES = 5 # Phase 1, 2, 3 (AdvCfg+Deploy), 4 (Terminal), 5 (NVIDIA)
+# MAX_INITIAL_PHASES: P1:SysPrep, P2:BasicCfg, P3:Gnome, P4:AdvCfg, P5:Terminal, P6:NVIDIA
+MAX_INITIAL_PHASES = 6
 
 
 # --- Logging Setup ---
@@ -92,6 +95,7 @@ def get_real_user_home():
         except KeyError:
             home_path = Path(f"/home/{sudo_user}")
             if home_path.is_dir(): return home_path
+            print_warning(f"Could not determine home directory for SUDO_USER '{sudo_user}' via pwd. Falling back to /home/{sudo_user}, then current user's home.")
             return Path.home() 
     return Path.home()
 
@@ -105,7 +109,7 @@ def check_python_requirements():
             requirements_list = [line.strip() for line in f if line.strip() and not line.startswith('#')]
     except FileNotFoundError:
         print_info(f"{REQUIREMENTS_FILE} not found. No Python dependencies to check for the script itself.")
-        return True # No file, no problem for this check
+        return True 
     
     if not requirements_list:
         print_info(f"{REQUIREMENTS_FILE} is empty. No Python dependencies to check.")
@@ -113,8 +117,7 @@ def check_python_requirements():
         
     missing_packages = []
     for req_str in requirements_list:
-        # Simplified check for this example
-        package_name = req_str.split('==')[0].split('>=')[0].strip()
+        package_name = req_str.split('==')[0].split('>=')[0].split('<')[0].split('~=')[0].strip()
         try:
             if PKG_RESOURCE_STYLE:
                 pkg_resources.get_distribution(package_name)
@@ -138,7 +141,8 @@ def check_python_requirements():
     return True
 
 def deploy_user_configs():
-    print_step("Config Deployment", "Deploying user configuration files .zshrc and .nanorc")
+    # This function is part of Phase 4 (Advanced Config & Finalize)
+    print_step("4.1" if LAST_COMPLETED_PHASE == 3 else "Config Deployment", "Deploying user configuration files .zshrc and .nanorc") # Step num conditional for context
     if not USER_HOME_DIR or not USER_HOME_DIR.is_dir():
         print_error(f"User home '{USER_HOME_DIR}' invalid. Cannot deploy configs.")
         return False
@@ -167,27 +171,28 @@ def deploy_user_configs():
                 all_copied = False
         else:
             print_warning(f"Source '{src}' not found. Skipping deployment of {src.name}.")
-            all_copied = False
+            all_copied = False # Or True if optional, but for core configs, usually False.
     return all_copied
 
 
-def run_phase_three_advanced_config_and_finalize():
-    print_header("Phase 3: Advanced Configuration & Finalization")
-    phase_3_logic_successful = True
-    print_info("Executing advanced configuration steps for Phase 3 (if any)...")
-    # --- Placeholder for actual Phase 3 Advanced Configuration ---
+def run_phase_four_advanced_config_and_finalize(): # Was run_phase_three_...
+    print_header("Phase 4: Advanced Configuration & Finalization") # Was Phase 3
+    phase_4_logic_successful = True
+    print_info("Executing advanced configuration steps for Phase 4 (if any)...")
+    # --- Placeholder for actual Phase 4 Advanced Configuration (besides dotfile deployment) ---
+    # Example: print_step("4.0", "Running other advanced configurations...")
     
-    if not phase_3_logic_successful:
-        print_error("Core logic for Phase 3 failed. Skipping config deployment.")
+    if not phase_4_logic_successful:
+        print_error("Core logic for Phase 4 failed. Skipping config deployment.")
         return False
 
-    print_info("Phase 3 core logic complete. Deploying user configs.")
+    print_info("Phase 4 core logic complete. Deploying user configs.")
     if deploy_user_configs():
-        print_success("Phase 3 (Advanced Config & Finalize) complete!")
-        update_last_completed_phase(3)
+        print_success("Phase 4 (Advanced Config & Finalize) complete!")
+        update_last_completed_phase(4) # Update to phase 4
         return True
     else:
-        print_error("Failed to deploy configs in Phase 3. Phase not fully complete.")
+        print_error("Failed to deploy configs in Phase 4. Phase not fully complete.")
         return False
 
 def display_menu():
@@ -197,32 +202,45 @@ def display_menu():
         console.print("[green bold]INFO: Full Initial Setup (All Phases) was previously completed.[/]")
     console.print("Choose an option:")
 
+    # Phase 1
     status_p1 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 1 else "[yellow]Pending[/yellow]"
     console.print(f"1. Phase 1: System Preparation - Status: {status_p1}")
 
+    # Phase 2
     status_p2 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 2 else "[yellow]Pending[/yellow]"
     can_run_p2 = (LAST_COMPLETED_PHASE >= 1)
     p2_text = f"2. Phase 2: Basic Package Configuration - Status: {status_p2}"
     if not can_run_p2 and LAST_COMPLETED_PHASE < 2: p2_text += " (Requires Phase 1)"
     console.print(p2_text)
 
+    # Phase 3 (New: Gnome Configuration)
     status_p3 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 3 else "[yellow]Pending[/yellow]"
     can_run_p3 = (LAST_COMPLETED_PHASE >= 2)
-    p3_text = f"3. Phase 3: Advanced Config & Finalize - Status: {status_p3}"
+    p3_text = f"3. Phase 3: GNOME Configuration - Status: {status_p3}"
     if not can_run_p3 and LAST_COMPLETED_PHASE < 3: p3_text += " (Requires Phase 2)"
     console.print(p3_text)
     
+    # Phase 4 (Old Phase 3: Advanced Config & Finalize)
     status_p4 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 4 else "[yellow]Pending[/yellow]"
     can_run_p4 = (LAST_COMPLETED_PHASE >= 3) 
-    p4_text = f"4. Phase 4: Terminal Enhancement - Status: {status_p4}"
+    p4_text = f"4. Phase 4: Advanced Config & Finalize - Status: {status_p4}"
     if not can_run_p4 and LAST_COMPLETED_PHASE < 4: p4_text += " (Requires Phase 3)"
     console.print(p4_text)
 
+    # Phase 5 (Old Phase 4: Terminal Enhancement)
     status_p5 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 5 else "[yellow]Pending[/yellow]"
-    can_run_p5 = (LAST_COMPLETED_PHASE >= 1) # NVIDIA drivers depend on RPM Fusion from Phase 1
-    p5_text = f"5. Phase 5: NVIDIA Driver Installation - Status: {status_p5}"
-    if not can_run_p5 and LAST_COMPLETED_PHASE < 5: p5_text += " (Requires Phase 1)"
+    can_run_p5 = (LAST_COMPLETED_PHASE >= 4) 
+    p5_text = f"5. Phase 5: Terminal Enhancement - Status: {status_p5}"
+    if not can_run_p5 and LAST_COMPLETED_PHASE < 5: p5_text += " (Requires Phase 4)"
     console.print(p5_text)
+
+    # Phase 6 (Old Phase 5: NVIDIA Driver Installation)
+    status_p6 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 6 else "[yellow]Pending[/yellow]"
+    can_run_p6 = (LAST_COMPLETED_PHASE >= 1) # NVIDIA drivers depend on RPM Fusion from Phase 1
+    p6_text = f"6. Phase 6: NVIDIA Driver Installation - Status: {status_p6}"
+    if not can_run_p6 and LAST_COMPLETED_PHASE < 1: p6_text += " (Requires Phase 1 to be run first)" # Clarified dependency wording
+    # Even if P1 is done, we might want to suggest a sequence. But P1 is the hard technical dependency.
+    console.print(p6_text)
 
     console.print("0. Exit")
     console.print("-" * 70)
@@ -232,15 +250,18 @@ def display_menu():
     if can_run_p3 or LAST_COMPLETED_PHASE >= 3: choices.append("3")
     if can_run_p4 or LAST_COMPLETED_PHASE >= 4: choices.append("4") 
     if can_run_p5 or LAST_COMPLETED_PHASE >= 5: choices.append("5")
+    if can_run_p6 or LAST_COMPLETED_PHASE >= 6: choices.append("6") # NVIDIA can be run after P1
     
     valid_choices = sorted(list(set(choices)))
     default_choice = "0"
 
+    # Suggest next logical step
     if "1" in valid_choices and LAST_COMPLETED_PHASE < 1: default_choice = "1"
     elif "2" in valid_choices and can_run_p2 and LAST_COMPLETED_PHASE < 2: default_choice = "2"
     elif "3" in valid_choices and can_run_p3 and LAST_COMPLETED_PHASE < 3: default_choice = "3"
     elif "4" in valid_choices and can_run_p4 and LAST_COMPLETED_PHASE < 4: default_choice = "4"
     elif "5" in valid_choices and can_run_p5 and LAST_COMPLETED_PHASE < 5: default_choice = "5"
+    elif "6" in valid_choices and can_run_p6 and LAST_COMPLETED_PHASE < 6 and LAST_COMPLETED_PHASE >= 1: default_choice = "6" # Suggest NVIDIA if P1 done and P6 not
     
     return Prompt.ask("Enter your choice", choices=valid_choices, default=default_choice)
 
@@ -258,12 +279,12 @@ def main():
         print_warning("Root privileges required for many phases.")
         if Prompt.ask("Not running as root. Continue with limited functionality (menu display, user-specific phases)?", choices=["y", "n"], default="n") != "y":
             sys.exit(0)
-    
+
     while True:
         choice = display_menu()
-        action_taken = False # To control the "Press Enter" prompt
+        action_taken = False 
 
-        if choice == '1':
+        if choice == '1': # Phase 1: System Preparation
             action_taken = True
             if LAST_COMPLETED_PHASE >= 1 and Prompt.ask("Phase 1 completed. Re-run?", default="n") == 'n': continue
             if os.geteuid() != 0: print_error("Phase 1 requires root.")
@@ -271,8 +292,8 @@ def main():
                 try:
                     if run_system_preparation(): update_last_completed_phase(1)
                 except Exception as e: logging.critical(f"Phase 1 Error: {e}", exc_info=True); print_error(f"P1 Err: {e}")
-        
-        elif choice == '2':
+
+        elif choice == '2': # Phase 2: Basic Package Configuration
             action_taken = True
             if LAST_COMPLETED_PHASE >= 2 and Prompt.ask("Phase 2 completed. Re-run?", default="n") == 'n': continue
             if LAST_COMPLETED_PHASE < 1: print_warning("Phase 1 must be completed first.")
@@ -282,47 +303,55 @@ def main():
                     if run_basic_configuration(): update_last_completed_phase(2)
                 except Exception as e: logging.critical(f"Phase 2 Error: {e}", exc_info=True); print_error(f"P2 Err: {e}")
 
-        elif choice == '3':
+        elif choice == '3': # Phase 3: GNOME Configuration (NEW)
             action_taken = True
             if LAST_COMPLETED_PHASE >= 3 and Prompt.ask("Phase 3 completed. Re-run?", default="n") == 'n': continue
             if LAST_COMPLETED_PHASE < 2: print_warning("Phase 2 must be completed first.")
-            # Phase 3 might need root for some advanced config or chown in deploy_user_configs
+            elif os.geteuid() != 0: print_error("Phase 3 requires root for package installations.")
             else:
                 try:
-                    if run_phase_three_advanced_config_and_finalize(): update_last_completed_phase(3)
+                    if run_gnome_configuration(): update_last_completed_phase(3)
                 except Exception as e: logging.critical(f"Phase 3 Error: {e}", exc_info=True); print_error(f"P3 Err: {e}")
 
-        elif choice == '4':
+        elif choice == '4': # Phase 4: Advanced Config & Finalize (Old Phase 3)
             action_taken = True
             if LAST_COMPLETED_PHASE >= 4 and Prompt.ask("Phase 4 completed. Re-run?", default="n") == 'n': continue
             if LAST_COMPLETED_PHASE < 3: print_warning("Phase 3 must be completed first.")
+            # deploy_user_configs within run_phase_four... might need root for chown. Script root check is good.
+            else:
+                try:
+                    if run_phase_four_advanced_config_and_finalize(): update_last_completed_phase(4)
+                except Exception as e: logging.critical(f"Phase 4 Error: {e}", exc_info=True); print_error(f"P4 Err: {e}")
+
+        elif choice == '5': # Phase 5: Terminal Enhancement (Old Phase 4)
+            action_taken = True
+            if LAST_COMPLETED_PHASE >= 5 and Prompt.ask("Phase 5 completed. Re-run?", default="n") == 'n': continue
+            if LAST_COMPLETED_PHASE < 4: print_warning("Phase 4 must be completed first.")
             # terminal_enhancement handles user context if script is root
             else:
                 try:
-                    if run_terminal_enhancement(): update_last_completed_phase(4)
-                except Exception as e: logging.critical(f"Phase 4 Error: {e}", exc_info=True); print_error(f"P4 Err: {e}")
-        
-        elif choice == '5':
+                    if run_terminal_enhancement(): update_last_completed_phase(5)
+                except Exception as e: logging.critical(f"Phase 5 Error: {e}", exc_info=True); print_error(f"P5 Err: {e}")
+
+        elif choice == '6': # Phase 6: NVIDIA Driver Installation (Old Phase 5)
             action_taken = True
-            if LAST_COMPLETED_PHASE >= 5 and Prompt.ask("Phase 5 completed. Re-run?", default="n") == 'n': continue
+            if LAST_COMPLETED_PHASE >= 6 and Prompt.ask("Phase 6 completed. Re-run?", default="n") == 'n': continue
             if LAST_COMPLETED_PHASE < 1: print_warning("Phase 1 must be completed first (for RPM Fusion).")
-            elif os.geteuid() != 0: print_error("Phase 5 requires root.")
+            elif os.geteuid() != 0: print_error("Phase 6 (NVIDIA) requires root.")
             else:
                 try:
-                    # nvidia_installation itself might trigger a reboot, halting the script.
-                    # If it completes without rebooting, then we update the phase.
                     if run_nvidia_driver_installation(): 
-                        update_last_completed_phase(5)
-                except Exception as e: logging.critical(f"Phase 5 Error: {e}", exc_info=True); print_error(f"P5 Err: {e}")
+                        update_last_completed_phase(6)
+                except Exception as e: logging.critical(f"Phase 6 Error: {e}", exc_info=True); print_error(f"P6 Err: {e}")
 
         elif choice == '0':
             print_success("Exiting application. Goodbye!")
             break
         else:
             print_warning("Invalid choice, please try again.")
-            action_taken = True # Show "Press Enter" for invalid choice too
+            action_taken = True 
 
-        if action_taken and choice != '0': # Don't prompt after exit
+        if action_taken and choice != '0': 
             Prompt.ask("\nPress Enter to return to menu...", default="", show_default=False)
 
 
@@ -341,4 +370,10 @@ if __name__ == "__main__":
         logging.critical(f"Unhandled critical exception in main: {e}", exc_info=True)
     finally:
         logging.info("Application finished or terminated.")
-        sys.exit(0 if 'e' not in locals() else 1) # Exit 0 on normal exit, 1 on error
+
+        exit_code = 0
+        if 'e' in locals() and isinstance(locals()['e'], Exception) and not isinstance(locals()['e'], KeyboardInterrupt):
+            exit_code = 1 # Unhandled Exception
+        elif 'e' in locals() and isinstance(locals()['e'], KeyboardInterrupt):
+            exit_code = 0 # Or a specific code for interrupt, e.g. 130
+        sys.exit(exit_code)
