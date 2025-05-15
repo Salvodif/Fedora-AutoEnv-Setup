@@ -22,12 +22,13 @@ from scripts.myrich import (
     console, print_header, print_info, print_error, print_success,
     print_with_emoji, print_warning # print_step is not directly used here anymore
 )
-from system_preparation import run_system_preparation # Phase 1
-from basic_configuration import run_basic_configuration # Phase 2
+from scripts.system_preparation import run_system_preparation # Phase 1
+from scripts.basic_configuration import run_basic_configuration # Phase 2
 # Import the main function from terminal_enhancement
-from terminal_enhancement import run_terminal_enhancement # Phase 3
-from gnome_configuration import run_gnome_configuration # Phase 4
-from nvidia_installation import run_nvidia_driver_installation # Phase 5
+from scripts.terminal_enhancement import run_terminal_enhancement # Phase 3
+from scripts.gnome_configuration import run_gnome_configuration # Phase 4
+from scripts.nvidia_installation import run_nvidia_driver_installation # Phase 5
+from scripts.additional_packages import run_additional_packages_installation # Phase 6
 
 # --- Constants ---
 LOG_FILE = "app.log"
@@ -40,7 +41,7 @@ STATUS_FILE_PATH = SCRIPT_DIR / STATUS_FILE_NAME # Status file relative to insta
 STATUS_KEY_LAST_COMPLETED_PHASE = "last_completed_phase"
 
 LAST_COMPLETED_PHASE = 0
-MAX_INITIAL_PHASES = 5
+MAX_INITIAL_PHASES = 6
 
 
 # --- Logging Setup ---
@@ -166,6 +167,13 @@ def display_menu():
     elif not (LAST_COMPLETED_PHASE >=1) and LAST_COMPLETED_PHASE < 5 : p5_text += " (Requires Phase 1 for RPMFusion)"
     console.print(p5_text)
 
+    # Phase 6: Additional Packages
+    status_p6 = "[green]✓ Done[/green]" if LAST_COMPLETED_PHASE >= 6 else "[yellow]Pending[/yellow]"
+    can_run_p6 = (LAST_COMPLETED_PHASE >= 2) # Requires basic setup from Phase 2
+    p6_text = f"6. Phase 6: Additional Packages - Status: {status_p6}"
+    if not can_run_p6 and LAST_COMPLETED_PHASE < 6: p6_text += " (Requires Phase 2)"
+    console.print(p6_text)
+
     console.print("0. Exit")
     console.print("-" * 70)
 
@@ -174,7 +182,8 @@ def display_menu():
     if can_run_p3 or LAST_COMPLETED_PHASE >= 3: choices.append("3")
     if can_run_p4 or LAST_COMPLETED_PHASE >= 4: choices.append("4")
     if can_run_p5 or LAST_COMPLETED_PHASE >= 5: choices.append("5")
-    
+    if can_run_p6 or LAST_COMPLETED_PHASE >= 6: choices.append("6")
+
     valid_choices = sorted(list(set(choices)))
     default_choice = "0"
 
@@ -183,16 +192,22 @@ def display_menu():
     elif "3" in valid_choices and can_run_p3 and LAST_COMPLETED_PHASE < 3: default_choice = "3"
     elif "4" in valid_choices and can_run_p4 and LAST_COMPLETED_PHASE < 4 and LAST_COMPLETED_PHASE >=2 : default_choice = "4"
     elif "5" in valid_choices and can_run_p5 and LAST_COMPLETED_PHASE < 5 and LAST_COMPLETED_PHASE >=2 : default_choice = "5"
-    
+    elif "6" in valid_choices and can_run_p6 and LAST_COMPLETED_PHASE < 6 and LAST_COMPLETED_PHASE >=2 : default_choice = "6"
+
     if default_choice == "0" and LAST_COMPLETED_PHASE == 2 :
         if "3" in valid_choices and LAST_COMPLETED_PHASE <3: default_choice = "3"
         elif "4" in valid_choices and LAST_COMPLETED_PHASE <4: default_choice = "4"
         elif "5" in valid_choices and LAST_COMPLETED_PHASE <5: default_choice = "5"
+        elif "6" in valid_choices and LAST_COMPLETED_PHASE <6: default_choice = "6"
     elif default_choice == "0" and LAST_COMPLETED_PHASE == 3:
         if "4" in valid_choices and LAST_COMPLETED_PHASE <4: default_choice = "4"
         elif "5" in valid_choices and LAST_COMPLETED_PHASE <5: default_choice = "5"
+        elif "6" in valid_choices and LAST_COMPLETED_PHASE <6: default_choice = "6"
     elif default_choice == "0" and LAST_COMPLETED_PHASE == 4:
         if "5" in valid_choices and LAST_COMPLETED_PHASE <5: default_choice = "5"
+        elif "6" in valid_choices and LAST_COMPLETED_PHASE <6: default_choice = "6"
+    elif default_choice == "0" and LAST_COMPLETED_PHASE == 5:
+        if "6" in valid_choices and LAST_COMPLETED_PHASE <6: default_choice = "6"
 
     return Prompt.ask("Enter your choice", choices=valid_choices, default=default_choice)
 
@@ -271,6 +286,19 @@ def main():
                     if run_nvidia_driver_installation(): 
                         update_last_completed_phase(5)
                 except Exception as e: logging.critical(f"Phase 5 Error: {e}", exc_info=True); print_error(f"P5 Err: {e}")
+
+        elif choice == '6': # Phase 6: Additional Packages
+            action_taken = True
+            if LAST_COMPLETED_PHASE >= 6 and Prompt.ask("Phase 6 completed. Re-run?", default="n") == 'n': continue
+            if LAST_COMPLETED_PHASE < 2:
+                print_warning("Phase 2 (Basic Config) must be completed before Additional Packages (Phase 6).")
+            elif os.geteuid() != 0: 
+                print_error("Phase 6 (Additional Packages) requires root privileges for `dnf` and `flatpak` system installs.")
+            else:
+                try:
+                    if run_additional_packages_installation(): 
+                        update_last_completed_phase(6)
+                except Exception as e: logging.critical(f"Phase 6 Error: {e}", exc_info=True); print_error(f"P6 Err: {e}")
 
         elif choice == '0':
             print_success("Exiting application. Goodbye!")

@@ -14,9 +14,8 @@ from scripts.utils import run_command
 # List of packages to be installed
 PACKAGES_TO_INSTALL = [
     "git", "curl", "cargo", "zsh", "python3", "python3-pip",
-    "stow", "dnf-plugins-core", "powerline-fonts", "btop",
-    "bat", "fzf", "google-chrome-stable", "steam", "timeshift",
-    "vlc"
+    "stow", "dnf-plugins-core", "powerline-fonts", 
+    "bat", "fzf"
 ]
 
 # Google Chrome repo details
