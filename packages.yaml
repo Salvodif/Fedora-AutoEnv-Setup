@@ -33,9 +33,13 @@ phase2_basic_configuration:
   dnf_groups_sound_video: # For _install_media_codecs
     - "sound-and-video"
 
-# --- Phase 3: Terminal Enhancement (Starship install logic is custom, not a simple package) ---
-# No direct package manager lists here as Starship is installed via script.
-# .zshrc and .nanorc are deployed, not "installed" as packages.
+# --- Phase 3: Terminal Enhancement ---
+phase3_terminal_enhancement:
+  zsh-autosuggestions: git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+  zsh-syntax-highlighting: git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+  you-should-use: git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/you-should-use
+  zsh-eza: https://github.com/z-shell/zsh-eza.git ${ZSH_CUSTOM:~/.oh-my-zsh/custom}/plugins/you-should-use
+  fzf-tab: git clone https://github.com/Aloxaf/fzf-tab ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/fzf-tab
 
 # --- Phase 4: GNOME Configuration ---
 phase4_gnome_configuration:
