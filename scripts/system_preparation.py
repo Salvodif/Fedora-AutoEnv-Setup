@@ -190,11 +190,18 @@ def system_initial_update(): # Renamed to avoid confusion with the final update 
         logging.error("Initial dnf update -y failed.")
         return False # Potentially significant failure
 
-def enable_dnf5():
+def enable_dnf5(config: dict):
     """Installs DNF5 and its plugins."""
     print_step(1.4, "Enabling DNF5 (dnf install dnf5 dnf5-plugins -y)") # Adjusted step numbering
 
+    dnf5_packages = config.get('dnf_packages', [])
+    if not dnf5_packages:
+        print_warning("No DNF5 packages specified in configuration for system_preparation. Skipping DNF5 enablement.")
+        return True # Not a failure if not specified
+
     if not check_root_privileges(): return False
+
+    print_info(f"Attempting to install DNF5 packages: {', '.join(dnf5_packages)}")
     if run_command(["dnf", "install", "-y", "dnf5", "dnf5-plugins"]):
         print_success("DNF5 and dnf5-plugins installed successfully.")
         return True
@@ -274,7 +281,7 @@ def final_system_upgrade_and_refresh():
         return False
 
 
-def run_system_preparation():
+def run_system_preparation(config: dict):
     """Runs all system preparation steps (Phase 1)."""
     print_header("Phase 1: System Preparation")
     if not check_root_privileges():
@@ -307,7 +314,7 @@ def run_system_preparation():
 
     # Step 1.4: Enable DNF5
     if all_successful_so_far:
-        if not enable_dnf5():
+        if not enable_dnf5(config):
             # all_successful_so_far = False # Not necessarily fatal, dnf might still work
             print_warning("DNF5 installation failed. Continuing with dnf if available for subsequent steps...")
     else:
@@ -336,16 +343,3 @@ def run_system_preparation():
         print_warning("\nPhase 1 (System Preparation) completed with some errors or warnings. Please check the log and output.")
 
     return phase_1_overall_success
-
-
-if __name__ == '__main__':
-    logging.basicConfig(
-        filename='app_test_system_prep.log',
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(module)s.%(funcName)s:%(lineno)d - %(message)s'
-    )
-    console.print("[yellow]Running system_preparation.py directly for testing purposes.[/yellow]")
-    console.print("[yellow]This requires superuser privileges for DNF operations and file modifications.[/yellow]")
-    if not check_root_privileges():
-        sys.exit("Root privileges are required for this test.")
-    run_system_preparation()

@@ -140,7 +140,7 @@ def _install_starship():
         print_info("Starship may need to be installed manually: https://starship.rs/#installation")
         return False
 
-def run_terminal_enhancement():
+def run_terminal_enhancement(config: dict):
     """Main function for terminal enhancement phase."""
     print_header("Terminal Enhancement Configuration")
     overall_success = True
@@ -149,23 +149,11 @@ def run_terminal_enhancement():
     print_step("TE.1", "Deploying user configuration files")
     if not deploy_user_configs_for_terminal():
         print_error("Failed to deploy essential terminal configuration files (.zshrc, .nanorc).")
-        print_warning("Subsequent terminal enhancements might not work as expected.")
         overall_success = False
-        # If .zshrc is critical (e.g., for starship init), we might return False here.
-        # For now, let's assume it's a strong warning but not a complete blocker for trying other steps.
 
-    # Step 2: Install Starship prompt
     print_step("TE.2", "Installing Starship prompt")
     if not _install_starship():
         print_warning("Starship prompt installation failed or was skipped.")
-        # This is an enhancement, so not necessarily a critical failure for the phase.
-        # overall_success = False # Uncomment if Starship is considered critical for this phase.
-    
-    # Add other terminal enhancement steps here (e.g., zsh plugins, etc.)
-    # For example:
-    # print_step("TE.3", "Installing Zsh plugins (e.g., zsh-autosuggestions, zsh-syntax-highlighting)")
-    # success_plugins = _install_zsh_plugins() # Implement this function
-    # if not success_plugins: overall_success = False
 
     if overall_success:
         print_success("Terminal Enhancement phase completed.")
@@ -174,13 +162,3 @@ def run_terminal_enhancement():
         print_error("Terminal Enhancement phase completed with errors or warnings.")
     
     return overall_success
-
-if __name__ == '__main__':
-    # For testing terminal_enhancement.py directly
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    # Ensure SUDO_USER, SUDO_UID, SUDO_GID are set if testing with sudo
-    # Example: sudo SUDO_USER=$USER SUDO_UID=$(id -u $USER) SUDO_GID=$(id -g $USER) python scripts/terminal_enhancement.py
-    if run_terminal_enhancement():
-        print_success("Terminal enhancement script test completed successfully.")
-    else:
-        print_error("Terminal enhancement script test completed with errors.")

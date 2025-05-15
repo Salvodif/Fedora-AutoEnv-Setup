@@ -1,0 +1,128 @@
+# packages.yaml
+# Configuration for packages to be installed in various phases.
+
+# --- Phase 1: System Preparation ---
+phase1_system_preparation:
+  dnf_packages:
+    - "dnf5"
+    - "dnf5-plugins" # For enabling dnf5 if not already default
+
+# --- Phase 2: Basic System Package Configuration ---
+phase2_basic_configuration:
+  dnf_packages:
+    - "git"
+    - "curl"
+    - "cargo" # For Starship and other Rust tools
+    - "zsh"
+    - "python3"
+    - "python3-pip"
+    - "stow" # For dotfile management (if you use it)
+    - "dnf-plugins-core" # For dnf config-manager, useful for adding repos
+    - "powerline-fonts" # General purpose nice fonts
+    - "bat" # Cat clone with syntax highlighting
+    - "fzf" # Command-line fuzzy finder
+  dnf_groups_multimedia: # For _install_media_codecs
+    - "multimedia"
+  dnf_swap_ffmpeg: # For _install_media_codecs
+    from: "ffmpeg-free"
+    to: "ffmpeg"
+  dnf_multimedia_upgrade_opts: # For _install_media_codecs (currently hardcoded in script, example if you want to externalize)
+    group: "@multimedia"
+    setopt: "--setopt=install_weak_deps=False"
+    exclude: "--exclude=PackageKit-gstreamer-plugin"
+  dnf_groups_sound_video: # For _install_media_codecs
+    - "sound-and-video"
+
+# --- Phase 3: Terminal Enhancement (Starship install logic is custom, not a simple package) ---
+# No direct package manager lists here as Starship is installed via script.
+# .zshrc and .nanorc are deployed, not "installed" as packages.
+
+# --- Phase 4: GNOME Configuration ---
+phase4_gnome_configuration:
+  dnf_packages:
+    - "gnome-tweaks"
+    # gnome-shell-extensions provides the 'gnome-extensions' CLI tool
+    - "gnome-shell-extensions"
+  flatpak_apps:
+    "com.mattjakeman.ExtensionManager": "GNOME Extension Manager"
+  gnome_extensions:
+    # This structure matches the existing EXTENSIONS_TO_INSTALL Python dict
+    user-themes:
+      type: "ego"
+      uuid: "user-theme@gnome-shell-extensions.gcampax.github.com"
+      name: "User Themes"
+      numerical_id: "19"
+    quick-settings-tweaks:
+      type: "git"
+      url: "https://github.com/qwreey/quick-settings-tweaks.git"
+      install_script: "install.sh"
+      name: "Quick Settings Tweaks"
+      uuid_to_enable: "quick-settings-tweaks@qwreey"
+    just-perfection:
+      type: "ego"
+      uuid: "just-perfection-desktop@just-perfection"
+      numerical_id: "3843"
+      name: "Just Perfection"
+    rounded-window-corners:
+      type: "ego"
+      uuid: "rounded-window-corners@yilozt"
+      numerical_id: "5237"
+      name: "Rounded Window Corners"
+    dash-to-dock:
+      type: "ego"
+      uuid: "dash-to-dock@micxgx.gmail.com"
+      numerical_id: "307"
+      name: "Dash to Dock"
+    blur-my-shell:
+      type: "ego"
+      uuid: "blur-my-shell@aunetx"
+      numerical_id: "3193"
+      name: "Blur my Shell"
+    bluetooth-quick-connect:
+      type: "ego"
+      uuid: "bluetooth-quick-connect@bjarosze.gmail.com"
+      numerical_id: "1401"
+      name: "Bluetooth Quick Connect"
+    clipboard-indicator:
+      type: "ego"
+      uuid: "clipboard-indicator@tudmotu.com"
+      numerical_id: "779"
+      name: "Clipboard Indicator"
+    wireless-hid:
+      type: "ego"
+      uuid: "wireless-hid@chlumskyvaclav.gmail.com"
+      numerical_id: "5764"
+      name: "Wireless HID"
+    logo-menu:
+      type: "ego"
+      uuid: "logo-menu@fthx"
+      numerical_id: "442"
+      name: "Logo Menu"
+
+# --- Phase 5: NVIDIA Driver Installation ---
+phase5_nvidia_installation:
+  dnf_packages_standard: # For _install_standard_nvidia_drivers
+    - "akmod-nvidia"
+    - "xorg-x11-drv-nvidia-cuda"
+  dnf_package_tainted_repo: "rpmfusion-nonfree-release-tainted" # For _enable_rpm_fusion_tainted_repo
+  dnf_swap_open_drivers: # For _swap_to_nvidia_open_drivers
+    from: "akmod-nvidia"
+    to: "akmod-nvidia-open"
+
+# --- Phase 6: Additional Packages ---
+phase6_additional_packages:
+  dnf_packages:
+    - "btop"
+    - "fastfetch"
+    - "google-chrome-stable"
+    - "steam"
+    - "timeshift"
+    - "unzip"
+    - "p7zip" # For 7z
+    - "p7zip-plugins" # For more archive formats with 7z
+    # - "util-linux-user" # Example for chsh
+  flatpak_apps:
+    "org.gimp.GIMP": "GIMP (Image Editor)"
+    "com.spotify.Client": "Spotify (Music Streaming)"
+    "com.discordapp.Discord": "Discord (Chat)"
+    "com.obsproject.Studio": "OBS Studio (Screen Recording/Streaming)"

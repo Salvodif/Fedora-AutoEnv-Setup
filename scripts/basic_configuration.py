@@ -11,13 +11,6 @@ from scripts.myrich import (
 )
 from scripts.utils import run_command
 
-# List of packages to be installed
-PACKAGES_TO_INSTALL = [
-    "git", "curl", "cargo", "zsh", "python3", "python3-pip",
-    "stow", "dnf-plugins-core", "powerline-fonts", 
-    "bat", "fzf"
-]
-
 # Google Chrome repo details
 CHROME_REPO_URL = "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
 CHROME_REPO_NAME = "google-chrome"
@@ -68,7 +61,7 @@ gpgkey=https://dl.google.com/linux/linux_signing_key.pub
         logging.error(f"Unexpected error creating .repo file: {e}", exc_info=True)
         return False
 
-def _add_google_chrome_repo():
+def _add_google_chrome_repo(packages_to_install_this_run: list):
     print_info("Configuring Google Chrome repository...")
     dnf_cmd = "dnf5" if shutil.which("dnf5") else "dnf"
     if not shutil.which(dnf_cmd):
@@ -79,7 +72,7 @@ def _add_google_chrome_repo():
     config_manager_cmd_name = f"{dnf_cmd}-config-manager"
     config_manager_path = shutil.which(config_manager_cmd_name)
 
-    if dnf_cmd == "dnf" and "dnf-plugins-core" in PACKAGES_TO_INSTALL and config_manager_path:
+    if dnf_cmd == "dnf" and "dnf-plugins-core" in packages_to_install_this_run and config_manager_path:
         print_info(f"Attempting to add repo using '{config_manager_cmd_name} --add-repo'...")
         cmd_add_repo_config_manager = [config_manager_cmd_name, "--add-repo", CHROME_REPO_URL]
         stdout, stderr, returncode = run_command(cmd_add_repo_config_manager, capture_output=True, check=False)
@@ -102,14 +95,19 @@ def _add_google_chrome_repo():
         return _add_google_chrome_repo_manual()
     return False
 
-def _install_core_packages():
+def _install_core_packages(config: dict):
     dnf_command = "dnf5" if shutil.which("dnf5") else "dnf"
     if not shutil.which(dnf_command):
         print_error(f"`{dnf_command}` command not found. Cannot install packages.")
         logging.error(f"`{dnf_command}` not found for package installation.")
         return False
+
+    packages_to_install_this_run = list(config.get('dnf_packages', []))
+    if not packages_to_install_this_run:
+        print_info("No core DNF packages specified in configuration for basic_configuration.")
+        return True
+
     all_good = True
-    packages_to_install_this_run = list(PACKAGES_TO_INSTALL)
     if "dnf-plugins-core" in packages_to_install_this_run and dnf_command == "dnf":
         config_manager_for_dnf_path = shutil.which("dnf-config-manager")
         if not config_manager_for_dnf_path:
@@ -121,19 +119,23 @@ def _install_core_packages():
                 print_success("'dnf-plugins-core' installed/updated.")
         else:
             print_info("'dnf-config-manager' found, 'dnf-plugins-core' likely already installed or handled.")
-    if "google-chrome-stable" in packages_to_install_this_run:
+
+    chrome_package_name = "google-chrome-stable" # As defined in YAML
+    if chrome_package_name in packages_to_install_this_run:
         print_info("Processing Google Chrome installation:")
-        if not _add_google_chrome_repo():
+        if not _add_google_chrome_repo(packages_to_install_this_run):
             print_warning("Proceeding without Google Chrome due to repository setup failure.")
             logging.warning("Google Chrome repository setup failed. Chrome will not be installed.")
             try:
-                packages_to_install_this_run.remove("google-chrome-stable")
+                packages_to_install_this_run.remove(chrome_package_name)
             except ValueError:
                 pass 
+
     final_packages_list = [pkg for pkg in packages_to_install_this_run if pkg] 
     if not final_packages_list:
         print_info("No further core packages to install from the list at this stage.")
-        return True 
+        return True
+
     print_info(f"Installing/updating core packages: {', '.join(final_packages_list)}")
     command = [dnf_command, "install", "-y"] + final_packages_list
     if run_command(command):
@@ -144,56 +146,84 @@ def _install_core_packages():
         all_good = False
     return all_good
 
-def _install_media_codecs():
+def _install_media_codecs(config: dict): # Accept config
     dnf_command = "dnf5" if shutil.which("dnf5") else "dnf"
     if not shutil.which(dnf_command):
         print_error(f"`{dnf_command}` command not found. Cannot install media codecs.")
-        logging.error(f"`{dnf_command}` not found for media codec installation.")
         return False
+
     all_codecs_installed_successfully = True
-    print_info("Attempting to install multimedia packages and codecs. This may take a while.")
+    print_info("Attempting to install multimedia packages and codecs.")
     print_info("This assumes RPM Fusion repositories (free and non-free) are enabled (usually done in Phase 1).")
-    print_info("Installing 'multimedia' group...")
-    cmd1 = [dnf_command, "group", "install", "-y", "multimedia"]
-    if run_command(cmd1):
-        print_success("'multimedia' group processed successfully.")
-    else:
-        print_error("Failed to process 'multimedia' group.")
-        logging.error(f"Command `{' '.join(cmd1)}` failed.")
-        all_codecs_installed_successfully = False
-    print_info("Swapping 'ffmpeg-free' with full 'ffmpeg'...")
-    cmd2 = [dnf_command, "swap", "ffmpeg-free", "ffmpeg", "--allowerasing", "-y"]
-    stdout_swap, stderr_swap, rc_swap = run_command(cmd2, capture_output=True, check=False)
-    if rc_swap == 0:
-        print_success("Successfully swapped 'ffmpeg-free' for 'ffmpeg' (or ffmpeg was already the full version / ffmpeg-free not installed).")
-    else:
-        if stderr_swap and ("No match for argument: ffmpeg-free" in stderr_swap or "Nothing to do." in stderr_swap):
-            print_info("Swap for ffmpeg: 'ffmpeg-free' not found or no swap needed. This is likely okay.")
-        elif stdout_swap and "Nothing to do." in stdout_swap:
-             print_info("Swap for ffmpeg: Nothing to do. This is likely okay.")
+
+    # Get configurations from YAML or use defaults/skip if not present
+    multimedia_groups = config.get('dnf_groups_multimedia', [])
+    ffmpeg_swap = config.get('dnf_swap_ffmpeg', {})
+    multimedia_upgrade_opts_config = config.get('dnf_multimedia_upgrade_opts', {})
+    sound_video_groups = config.get('dnf_groups_sound_video', [])
+
+    if multimedia_groups:
+        print_info(f"Installing 'multimedia' group(s): {', '.join(multimedia_groups)}")
+        # Assuming multimedia_groups is a list like ["multimedia"]
+        cmd1 = [dnf_command, "group", "install", "-y"] + multimedia_groups
+        if run_command(cmd1):
+            print_success(f"'multimedia' group(s) {', '.join(multimedia_groups)} processed successfully.")
         else:
-            print_warning(f"Command to swap 'ffmpeg-free' with 'ffmpeg' returned code {rc_swap}. This might be okay.")
-            logging.warning(f"Command `{' '.join(cmd2)}` returned {rc_swap}. Stdout: {stdout_swap}. Stderr: {stderr_swap}")
-    print_info("Upgrading '@multimedia' group (gstreamer components)...")
-    cmd3 = [dnf_command, "upgrade", "-y", "@multimedia", "--setopt=install_weak_deps=False", "--exclude=PackageKit-gstreamer-plugin"]
-    if run_command(cmd3):
-        print_success("Successfully upgraded '@multimedia' group with specified options.")
+            print_error(f"Failed to process 'multimedia' group(s) {', '.join(multimedia_groups)}.")
+            all_codecs_installed_successfully = False
     else:
-        print_error("Failed to upgrade '@multimedia' group.")
-        logging.error(f"Command `{' '.join(cmd3)}` failed.")
-        all_codecs_installed_successfully = False
-    print_info("Installing 'sound-and-video' group...")
-    cmd4 = [dnf_command, "group", "install", "-y", "sound-and-video"]
-    if run_command(cmd4):
-        print_success("'sound-and-video' group processed successfully.")
+        print_info("No 'dnf_groups_multimedia' specified in config. Skipping.")
+
+    if ffmpeg_swap and 'from' in ffmpeg_swap and 'to' in ffmpeg_swap:
+        print_info(f"Swapping '{ffmpeg_swap['from']}' with full '{ffmpeg_swap['to']}'...")
+        cmd2 = [dnf_command, "swap", ffmpeg_swap['from'], ffmpeg_swap['to'], "--allowerasing", "-y"]
+        stdout_swap, stderr_swap, rc_swap = run_command(cmd2, capture_output=True, check=False)
+        if rc_swap == 0:
+            print_success(f"Successfully swapped '{ffmpeg_swap['from']}' for '{ffmpeg_swap['to']}' (or already swapped/not present).")
+        else:
+            if stderr_swap and (f"No match for argument: {ffmpeg_swap['from']}" in stderr_swap or "Nothing to do." in stderr_swap):
+                print_info(f"Swap for {ffmpeg_swap['to']}: '{ffmpeg_swap['from']}' not found or no swap needed. This is likely okay.")
+            elif stdout_swap and "Nothing to do." in stdout_swap:
+                 print_info(f"Swap for {ffmpeg_swap['to']}: Nothing to do. This is likely okay.")
+            else:
+                print_warning(f"Command to swap '{ffmpeg_swap['from']}' with '{ffmpeg_swap['to']}' returned code {rc_swap}. This might be okay.")
     else:
-        print_error("Failed to process 'sound-and-video' group.")
-        logging.error(f"Command `{' '.join(cmd4)}` failed.")
-        all_codecs_installed_successfully = False
+        print_info("No 'dnf_swap_ffmpeg' specified correctly in config. Skipping ffmpeg swap.")
+
+    if multimedia_upgrade_opts_config and 'group' in multimedia_upgrade_opts_config:
+        group_to_upgrade = multimedia_upgrade_opts_config['group']
+        setopt_val = multimedia_upgrade_opts_config.get('setopt', "")
+        exclude_val = multimedia_upgrade_opts_config.get('exclude', "")
+        
+        print_info(f"Upgrading '{group_to_upgrade}' group...")
+        cmd3_list = [dnf_command, "upgrade", "-y", group_to_upgrade]
+        if setopt_val: cmd3_list.append(setopt_val)
+        if exclude_val: cmd3_list.append(exclude_val)
+        
+        if run_command(cmd3_list):
+            print_success(f"Successfully upgraded '{group_to_upgrade}' group with specified options.")
+        else:
+            print_error(f"Failed to upgrade '{group_to_upgrade}' group.")
+            all_codecs_installed_successfully = False
+    else:
+        print_info("No 'dnf_multimedia_upgrade_opts' specified correctly in config. Skipping gstreamer component upgrade.")
+
+    if sound_video_groups:
+        print_info(f"Installing 'sound-and-video' group(s): {', '.join(sound_video_groups)}")
+        # Assuming sound_video_groups is a list like ["sound-and-video"]
+        cmd4 = [dnf_command, "group", "install", "-y"] + sound_video_groups
+        if run_command(cmd4):
+            print_success(f"'sound-and-video' group(s) {', '.join(sound_video_groups)} processed successfully.")
+        else:
+            print_error(f"Failed to process 'sound-and-video' group(s) {', '.join(sound_video_groups)}.")
+            all_codecs_installed_successfully = False
+    else:
+        print_info("No 'dnf_groups_sound_video' specified in config. Skipping.")
+
     if all_codecs_installed_successfully:
         print_success("Media codecs and sound/video packages configuration completed successfully.")
     else:
-        print_warning("Some media codec or sound/video package configurations encountered issues. Please review the output and logs.")
+        print_warning("Some media codec or sound/video package configurations encountered issues.")
     return all_codecs_installed_successfully
 
 def _is_systemd_resolved_active():
@@ -325,12 +355,17 @@ def _configure_google_dns():
         # _update_resolved_conf already printed an error
         return False
 
-def _set_zsh_as_default_shell():
+def _set_zsh_as_default_shell(packages_installed: list): # Accept list of packages that were intended/attempted
     zsh_path = shutil.which("zsh")
     if not zsh_path:
-        print_error("Zsh is not installed or not found in PATH. Cannot set as default shell.")
+        if "zsh" in packages_installed:
+            print_error("Zsh is not installed or not found in PATH. Cannot set as default shell.")
+            logging.error("Zsh not found via shutil.which('zsh').")
+        else:
+            print_info("Zsh is not installed (or not in PATH) and was not in the list of packages for this phase. Skipping setting it as default.")
         logging.error("Zsh not found via shutil.which('zsh').")
-        return False
+        return False # Or True if skipping is considered non-failure
+
     try:
         username = os.environ.get('SUDO_USER')
         if not username: 
@@ -365,11 +400,13 @@ def _set_zsh_as_default_shell():
         logging.error(f"chsh command failed for user {username} with shell {zsh_path}.")
         return False
 
-def run_basic_configuration():
+def run_basic_configuration(config: dict): # Accept config
     print_header("Phase 2: Basic System Package Configuration")
     if not _check_root_privileges():
         return False 
     overall_success = True 
+
+    core_packages_config = config.get('dnf_packages', []) # Used for Zsh check later
 
     print_step(2.1, "Installing core packages & Google Chrome repository")
     if not _install_core_packages():
@@ -388,18 +425,13 @@ def run_basic_configuration():
         # Let's consider it non-critical for overall_success unless a direct error occurred during an attempt.
         # The function itself returns False on direct error, so overall_success will be affected.
     
-    zsh_in_list = "zsh" in PACKAGES_TO_INSTALL
-    zsh_installed_and_found = shutil.which("zsh") is not None
-
-    if zsh_in_list and zsh_installed_and_found:
-        print_step(2.4, "Setting Zsh as default shell") # Was 2.3
-        if not _set_zsh_as_default_shell():
+    zsh_in_list = "zsh" in core_packages_config
+    if zsh_in_list:
+        print_step(2.4, "Setting Zsh as default shell")
+        if not _set_zsh_as_default_shell(core_packages_config): # Pass the list of packages
             print_warning("Failed to set Zsh as default shell. Please do it manually if desired.")
-    elif zsh_in_list and not zsh_installed_and_found:
-        print_warning("Zsh was in the list of packages to install, but it was not found after installation attempts. Skipping setting it as default shell.")
-        logging.warning("Zsh not found after attempted installation. Skipping chsh.")
-    elif not zsh_in_list:
-        print_info("Zsh is not in the list of packages to install. Skipping setting it as default shell.")
+    else:
+        print_info("Zsh is not in the list of configured packages for this phase. Skipping setting it as default shell.")
 
     if overall_success:
         console.print("\n[bold green]Phase 2 (Basic Package Configuration) completed successfully.[/bold green]")
@@ -412,16 +444,3 @@ def run_basic_configuration():
         print_warning("Please check the log file 'app.log' and output above for details.")
         print_info("Some configurations might require manual intervention.")
     return overall_success
-
-if __name__ == '__main__':
-    logging.basicConfig(
-        filename='app_test_basic_config.log',
-        level=logging.INFO, 
-        format='%(asctime)s - %(levelname)s - %(module)s.%(funcName)s:%(lineno)d - %(message)s'
-    )
-    console.print("[yellow]Running basic_configuration.py directly for testing purposes.[/yellow]")
-    console.print("[yellow]This requires superuser privileges for 'dnf', 'chsh', and systemd configuration.[/yellow]")
-    if run_basic_configuration():
-        print_success("Basic configuration test completed successfully.")
-    else:
-        print_error("Basic configuration test completed with errors.")
