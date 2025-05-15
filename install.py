@@ -9,7 +9,7 @@ from scripts import console_output as con
 from scripts import config_loader
 from scripts import phase1_system_preparation
 from scripts import phase2_basic_installation
-
+from scripts import phase3_terminal_enhancement
 
 # --- Constants ---
 STATUS_FILE_NAME = "install_status.json"
@@ -34,7 +34,7 @@ PHASES = {
         "name": "Phase 3: Terminal Enhancement",
         "description": "Install Zsh plugins (Oh My Zsh assumed for paths).",
         "dependencies": ["phase2_basic_configuration"], # Depends on Zsh and git
-        "handler": lambda: run_phase_placeholder("phase3_terminal_enhancement") # Placeholder
+        "handler": phase3_terminal_enhancement.run_phase3
     },
     "phase4_gnome_configuration": {
         "name": "Phase 4: GNOME Configuration & Extensions",

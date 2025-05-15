@@ -35,11 +35,14 @@ phase2_basic_configuration:
 
 # --- Phase 3: Terminal Enhancement ---
 phase3_terminal_enhancement:
-  zsh-autosuggestions: git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
-  zsh-syntax-highlighting: git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
-  you-should-use: git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/you-should-use
-  zsh-eza: https://github.com/z-shell/zsh-eza.git ${ZSH_CUSTOM:~/.oh-my-zsh/custom}/plugins/you-should-use
-  fzf-tab: git clone https://github.com/Aloxaf/fzf-tab ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/fzf-tab
+  autin: "cargo install atuin"
+  eza: "cargo install eza"
+  zoxide: "curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh"
+  zsh-autosuggestions: "git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"
+  zsh-syntax-highlighting: "git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting"
+  you-should-use: "git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/you-should-use"
+  zsh-eza: "git clone https://github.com/z-shell/zsh-eza.git ${ZSH_CUSTOM:~/.oh-my-zsh/custom}/plugins/you-should-use"
+  fzf-tab: "git clone https://github.com/Aloxaf/fzf-tab ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/fzf-tab"
 
 # --- Phase 4: GNOME Configuration ---
 phase4_gnome_configuration:
