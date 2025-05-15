@@ -78,10 +78,10 @@ phase3_terminal_enhancement:
   atuin_install: "cargo install atuin"
   zsh_autosuggestions_clone: "git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"
   # ... other terminal tools and Zsh plugins ...
+```
 
   You can (and should!) customize this file extensively to match your desired setup – add or remove packages, define different commands, or even structure entirely new phases.
   Ensure that commands intended for user-specific setup (like Zsh plugin installations) are compatible with being executed via `sudo -u <user> bash -c COMMAND`.
-```
 
 ## 🎨 Dotfile Customization
 
