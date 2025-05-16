@@ -44,8 +44,7 @@ phase3_terminal_enhancement:
 phase4_gnome_configuration:
   dnf_packages:
     - "gnome-tweaks"
-    # gnome-shell-extensions provides the 'gnome-extensions' CLI tool
-    - "gnome-shell-extensions"
+    - "gnome-shell-extension-common"
   pip:
     - "gnome-extensions-cli"
   flatpak_apps:
