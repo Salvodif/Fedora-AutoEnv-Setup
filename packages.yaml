@@ -6,6 +6,8 @@ phase1_system_preparation:
   dnf_packages:
     - "dnf5"
     - "dnf5-plugins" # For enabling dnf5 if not already default
+    - "flatpak"      # Uncomment or add this line if you want Phase 1 to ensure Flatpak itself is installed.
+                       # The script already attempts to add the Flathub remote if flatpak command is found.
 
 # --- Phase 2: Basic System Package Configuration ---
 phase2_basic_configuration:
