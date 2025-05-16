@@ -45,7 +45,7 @@ phase4_gnome_configuration:
   dnf_packages:
     - "gnome-tweaks"
     - "gnome-shell-extension-common"
-  pip:
+  pip_packages:
     - "gnome-extensions-cli"
   flatpak_apps:
     "com.mattjakeman.ExtensionManager": "GNOME Extension Manager"
