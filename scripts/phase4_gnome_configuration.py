@@ -401,7 +401,7 @@ def run_phase4(app_config: dict) -> bool:
         if gnome_extensions_cfg: 
             con.print_info(f"\nStep 4: Installing and enabling GNOME Shell Extensions for user '{target_user}'...")
             extensions_success_all = True
-            for ext_key__name, ext_config_dict in gnome_extensions_cfg.items(): # Renamed ext_key_name to avoid conflict
+            for ext_key_name, ext_config_dict in gnome_extensions_cfg.items(): # Renamed ext_key_name to avoid conflict
                 ext_type = ext_config_dict.get("type"); pretty_name = ext_config_dict.get("name", ext_key_name) # Used ext_key_name from loop
                 con.print_sub_step(f"Processing extension: {pretty_name} (Type: {ext_type})")
                 success_current_ext = False
