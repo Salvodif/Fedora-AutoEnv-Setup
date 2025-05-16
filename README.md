@@ -161,26 +161,46 @@ During `Phase 3: Terminal Enhancement`, these files will be automatically copied
         *   Perform necessary file manipulations, such as editing critical system files (e.g., `/etc/dnf/dnf.conf`, `/etc/systemd/resolved.conf`) or copying user-specific dotfiles.
         *   For tasks that directly impact a specific user's environment (like altering their default shell or installing Zsh plugins into their home directory), they accurately determine the target user (usually via the `SUDO_USER` environment variable) and expertly leverage the `run_as_user` capability of `system_utils.run_command`.
 
-## 📊 Current Phases Implemented
+### 🚀 Current Phases Implemented
 
-*   **Phase 1: System Preparation 🛡️:**
-    *   Installs core system packages as defined in `packages.yaml` (e.g., `dnf5`, `dnf5-plugins`).
-    *   Configures system-wide DNS settings (prioritizes `systemd-resolved` if available, provides guidance for NetworkManager, and includes a fallback for direct `/etc/resolv.conf` modification).
-    *   Optimizes DNF for faster performance by adjusting settings in `/etc/dnf/dnf.conf` (like `max_parallel_downloads` and `fastestmirror`).
-    *   Enables the RPM Fusion free and non-free repositories, essential for a wide range of software on Fedora.
-    *   Conducts a full system update (`dnf upgrade -y`) to bring all packages to their latest versions.
-    *   Adds the Flathub remote repository, expanding access to a vast library of Flatpak applications (system-wide).
-    *   Interactively prompts the user to optionally set or change the system's hostname.
-*   **Phase 2: Basic System Package Configuration 📦:**
-    *   Installs a curated list of essential DNF packages for a productive environment (e.g., `git`, `curl`, `zsh`, `python3-pip`).
-    *   Configures multimedia codecs by installing relevant DNF groups, intelligently swapping `ffmpeg-free` for the more comprehensive `ffmpeg` (requires RPM Fusion), and applying specific DNF group upgrade options for optimal media playback.
-*   **Phase 3: Terminal Enhancement 💻✨:**
-    *   Verifies that Zsh is installed on the system.
-    *   Sets Zsh as the default login shell for the target user, enhancing their command-line experience.
-    *   Installs a variety of user-selected terminal tools and Zsh plugins, executing commands directly from `packages.yaml` (supporting `cargo install`, `git clone`, `curl ... | sh`, and more).
-    *   Copies a custom `.zshrc` (from `Fedora-AutoEnv-Setup/zsh/.zshrc`) and `.nanorc` (from `Fedora-AutoEnv-Setup/nano/.nanorc`) to the target user's home directory, ensuring their preferred configurations are applied. Existing files are backed up.
-
-*(More exciting phases like GNOME Customization 🖼️, NVIDIA Driver Setup 🎮, Development Toolchains 👨‍💻, etc., can be seamlessly integrated using this extensible pattern!)*
+*   **Phase 1: System Preparation** ⚙️
+    *   Installs core DNF packages (e.g., `dnf5`, `flatpak` if specified).
+    *   Configures DNF for **performance** (`max_parallel_downloads`, `fastestmirror`).
+    *   Sets up **RPM Fusion** (free and non-free) repositories.
+    *   Configures DNS to use Google's public DNS servers (via `systemd-resolved` if active, or fallback).
+    *   Cleans DNF metadata and performs a full system update (`dnf upgrade -y`).
+    *   Sets up the **Flathub** repository system-wide for Flatpak.
+    *   Allows interactive setting of the system **hostname**.
+*   **Phase 2: Basic System Package Configuration** 📦
+    *   Installs essential general DNF packages (e.g., `git`, `curl`, `zsh`, `python3-pip`).
+    *   Configures **media codecs**:
+        *   Installs DNF multimedia groups (e.g., `@multimedia`).
+        *   Swaps `ffmpeg-free` with the full `ffmpeg` from RPM Fusion.
+        *   Applies DNF group upgrade options for multimedia packages.
+        *   Installs DNF sound and video groups (e.g., `@sound-and-video`).
+*   **Phase 3: Terminal Enhancement** 💻✨
+    *   Checks for Zsh installation and sets it as the **default shell** for the target user (typically `SUDO_USER`).
+    *   Installs user-defined terminal enhancement tools and Zsh plugins via shell commands (e.g., `atuin`, `eza`, `zoxide`, `zsh-autosuggestions`, `zsh-syntax-highlighting`) run as the target user.
+    *   Copies pre-configured `.zshrc` and `.nanorc` files to the target user's home directory, backing up existing ones.
+*   **Phase 4: GNOME Configuration & Extensions** 🎨🖼️
+    *   Installs DNF packages relevant to GNOME (e.g., `gnome-tweaks`, `gnome-shell-extensions`).
+    *   Ensures `gnome-extensions-cli` is installed via `pip` for the target user.
+    *   Installs and enables **GNOME Shell Extensions** for the target user based on `packages.yaml`. Supports:
+        *   Extensions from `extensions.gnome.org` (EGO) via UUID or numerical ID.
+        *   Extensions from Git repositories via cloning and running a specified install script.
+    *   Installs specified Flatpak applications system-wide (e.g., GNOME Extension Manager).
+*   **Phase 5: NVIDIA Driver Installation** 🎮🖥️
+    *   Prompts the user for **confirmation** before proceeding, warning about GPU compatibility.
+    *   Checks if NVIDIA drivers appear to be already installed.
+    *   Performs a system update (`dnf update -y`) and advises a **reboot** if the kernel was updated before driver installation.
+    *   Enables the RPM Fusion non-free **tainted** repository if configured.
+    *   Allows user selection between **standard proprietary** NVIDIA drivers or **open kernel module** drivers if both are configured.
+    *   Installs the chosen NVIDIA drivers (`akmod-nvidia` and `xorg-x11-drv-nvidia-cuda`, or swaps to/installs `akmod-nvidia-open`).
+    *   Advises the user to **wait** for kernel modules to build and provides a command to check.
+    *   Strongly recommends a system **REBOOT** to complete the driver installation.
+*   **Phase 6: Additional User Packages** 🧩🌐
+    *   Installs a list of additional **DNF packages** as specified in the configuration.
+    *   Installs a list of additional **Flatpak applications** (system-wide from Flathub) as specified in the configuration.
 
 ## 🙌 Contributing
 

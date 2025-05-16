@@ -1,7 +1,7 @@
 # TODO List Fedora AutoEnv Setup
 
 ## Pkgs to add
-- [] visual studio code
+- [x] visual studio code
 
 ## Gnome
 - [x] gnome tweaks from dnf
@@ -11,8 +11,8 @@
 ## Bonus
 - [ ] dnf copr enable elxreno/preload -y && dnf install preload -y
 - [ ] configure search on gnome
-- [ ] bootles from flathub
-    - [ ] flatpak install flathub com.github.tchx84.Flatseal
+- [x] bootles from flathub
+    - [x] flatpak install flathub com.github.tchx84.Flatseal
 - [ ] Razer support `sudo dnf install kernel-devel` (https://openrazer.github.io/)
     - `sudo dnf config-manager addrepo --from-repofile=https://openrazer.github.io/hardware:razer.repo`
     - `sudo dnf install openrazer-meta`
