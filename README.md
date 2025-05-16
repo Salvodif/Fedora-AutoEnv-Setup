@@ -216,10 +216,12 @@ Please ensure your code is clean, well-commented, and adheres to the project's s
 ## 📜 License
 
 This project is distributed under the MIT License. See the `LICENSE` file for more details.
-*(You'll need to create a `LICENSE` file in your project root, typically containing the MIT License text.)*
 
 ## ⚠️ Disclaimer
 
 This tool is powerful and modifies system configurations, installs software, and can alter user environments. While developed with care, unforeseen issues can occur.
+
 **‼️ ALWAYS back up your important data and system, or test thoroughly in a virtual machine or non-critical environment before running `Fedora-AutoEnv-Setup` on a primary or production system. ‼️**
-Use this tool at your own risk. The authors and contributors are not responsible for any damage, data loss, or other adverse effects that may result from its use.
+
+Use this tool at your own risk.
+The authors and contributors are not responsible for any damage, data loss, or other adverse effects that may result from its use.
