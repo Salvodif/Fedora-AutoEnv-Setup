@@ -117,13 +117,28 @@ phase6_additional_packages:
   dnf_packages:
     - "btop"
     - "fastfetch"
-    - "google-chrome-stable"
     - "steam"
     - "timeshift"
     - "unzip"
     - "p7zip" # For 7z
     - "p7zip-plugins" # For more archive formats with 7z
-    # - "util-linux-user" # Example for chsh
+  custom_repo_dnf_packages:
+    visual_studio_code:
+      name: "Visual Studio Code"
+      check_if_installed_pkg: "code"
+      repo_setup_commands:
+        - "sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc"
+        - "echo -e \"[code]\\nname=Visual Studio Code\\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\\nenabled=1\\nautorefresh=1\\ntype=rpm-md\\ngpgcheck=1\\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc\" | sudo tee /etc/yum.repos.d/vscode.repo > /dev/null"
+      dnf_package_to_install: "code"
+    google_chrome:
+      name: "Google Chrome"
+      check_if_installed_pkg: "google-chrome-stable"
+      repo_url: "https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm" # Example, Google Chrome often uses direct RPM or a setup script
+      # For Google Chrome, dnf install of the RPM usually sets up the repo.
+      # So its pre_install_commands might be empty, and dnf_package_to_install would be the URL.
+      # This structure is flexible.
+      dnf_package_to_install: "google-chrome-stable" # Or the RPM URL if installing directly
+
   flatpak_apps:
     "org.gimp.GIMP": "GIMP (Image Editor)"
     "com.spotify.Client": "Spotify (Music Streaming)"
