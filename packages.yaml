@@ -50,10 +50,11 @@ phase4_gnome_configuration:
     - "gnome-tweaks"
     # gnome-shell-extensions provides the 'gnome-extensions' CLI tool
     - "gnome-shell-extensions"
+  pip:
+    - "gnome-extensions-cli"
   flatpak_apps:
     "com.mattjakeman.ExtensionManager": "GNOME Extension Manager"
   gnome_extensions:
-    # This structure matches the existing EXTENSIONS_TO_INSTALL Python dict
     user-themes:
       type: "ego"
       uuid: "user-theme@gnome-shell-extensions.gcampax.github.com"
