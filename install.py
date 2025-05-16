@@ -6,6 +6,7 @@ import os # For os.geteuid() if we add root check
 from pathlib import Path
 from typing import Dict, List, Callable, Optional
 
+from scripts.logger_utils import setup_logger, app_logger
 from scripts import console_output as con
 from scripts import config_loader
 from scripts import phase1_system_preparation
@@ -159,65 +160,78 @@ def display_main_menu(phase_status: Dict[str, bool]):
 
 def main():
     """Main function to run the Fedora AutoEnv Setup utility."""
-    
-    # Check if running as root, many phases need it
-    # if os.geteuid() != 0:
-    #     con.print_error("This script needs to be run with sudo or as root for many operations.", exit_after=True)
-    #     sys.exit(1)
-    # Note: Some phases determine target_user from SUDO_USER, so running via `sudo ./install.py` is preferred.
 
-    # Load application-wide configuration from packages.yaml
-    app_config = config_loader.load_configuration(CONFIG_FILE_NAME) # Explicitly pass filename
-    if not app_config: # load_configuration returns {} on error or empty file
-        # Check if the file itself is missing, as load_configuration prints detailed errors
-        if not Path(CONFIG_FILE_NAME).is_file():
-            con.print_error(f"Critical: Configuration file '{CONFIG_FILE_NAME}' not found in project root or current directory.", exit_after=True)
-        else:
-            # File exists but is empty, or parsing failed (error already printed by loader)
-            con.print_error(f"Critical: Failed to load or parse '{CONFIG_FILE_NAME}'. Please ensure it exists and is valid. Check messages above.", exit_after=True)
-        sys.exit(1) # exit_after=True should handle this, but being explicit.
+    app_logger.info("Fedora AutoEnv Setup script started.")
 
-    phase_status = load_phase_status()
+    try:
+        # Check if running as root, many phases need it
+        # if os.geteuid() != 0:
+        #     con.print_error("This script needs to be run with sudo or as root for many operations.", exit_after=True)
+        #     sys.exit(1)
+        # Note: Some phases determine target_user from SUDO_USER, so running via `sudo ./install.py` is preferred.
 
-    while True:
-        menu_options = display_main_menu(phase_status)
-        # Generate choice list for Prompt.ask dynamically
-        valid_choices = list(menu_options.keys()) + ['q', 'Q']
-        
-        choice = con.ask_question("Enter your choice:", choices=valid_choices).lower()
-
-        if choice == 'q':
-            con.print_info("Exiting Fedora AutoEnv Setup. Bye!")
-            break
-        elif choice in menu_options:
-            phase_to_run_id = menu_options[choice]
-            phase_to_run_info = PHASES[phase_to_run_id]
-
-            if not are_dependencies_met(phase_to_run_id, phase_status):
-                # This check is somewhat redundant due to menu display logic, but safe
-                con.print_warning(f"Cannot run '{phase_to_run_info['name']}'. Dependencies not met.")
-                con.ask_question("Press Enter to continue...")
-                continue
-
-            if phase_status.get(phase_to_run_id, False): # If phase is marked complete
-                if not con.confirm_action(f"'{phase_to_run_info['name']}' is already marked as complete. Run again?", default=False):
-                    continue
-
-            con.print_info(f"\nStarting '{phase_to_run_info['name']}'...")
-            
-            # *** THE FIX IS HERE: Pass app_config to the handler ***
-            success = phase_to_run_info["handler"](app_config) 
-            
-            if success:
-                mark_phase_complete(phase_to_run_id, phase_status)
+        # Load application-wide configuration from packages.yaml
+        app_config = config_loader.load_configuration(CONFIG_FILE_NAME) # Explicitly pass filename
+        if not app_config: # load_configuration returns {} on error or empty file
+            # Check if the file itself is missing, as load_configuration prints detailed errors
+            if not Path(CONFIG_FILE_NAME).is_file():
+                con.print_error(f"Critical: Configuration file '{CONFIG_FILE_NAME}' not found in project root or current directory.", exit_after=True)
             else:
-                con.print_error(f"'{phase_to_run_info['name']}' encountered an error or was not fully completed.")
+                # File exists but is empty, or parsing failed (error already printed by loader)
+                con.print_error(f"Critical: Failed to load or parse '{CONFIG_FILE_NAME}'. Please ensure it exists and is valid. Check messages above.", exit_after=True)
+            sys.exit(1) # exit_after=True should handle this, but being explicit.
 
-            if not con.confirm_action("Return to main menu?", default=True):
+        phase_status = load_phase_status()
+
+        while True:
+            menu_options = display_main_menu(phase_status)
+            # Generate choice list for Prompt.ask dynamically
+            valid_choices = list(menu_options.keys()) + ['q', 'Q']
+            
+            choice = con.ask_question("Enter your choice:", choices=valid_choices).lower()
+
+            if choice == 'q':
                 con.print_info("Exiting Fedora AutoEnv Setup. Bye!")
                 break
-        else:
-            con.print_warning("Invalid choice. Please try again.")
+            elif choice in menu_options:
+                phase_to_run_id = menu_options[choice]
+                phase_to_run_info = PHASES[phase_to_run_id]
+
+                if not are_dependencies_met(phase_to_run_id, phase_status):
+                    # This check is somewhat redundant due to menu display logic, but safe
+                    con.print_warning(f"Cannot run '{phase_to_run_info['name']}'. Dependencies not met.")
+                    con.ask_question("Press Enter to continue...")
+                    continue
+
+                if phase_status.get(phase_to_run_id, False): # If phase is marked complete
+                    if not con.confirm_action(f"'{phase_to_run_info['name']}' is already marked as complete. Run again?", default=False):
+                        continue
+
+                con.print_info(f"\nStarting '{phase_to_run_info['name']}'...")
+                
+                # *** THE FIX IS HERE: Pass app_config to the handler ***
+                success = phase_to_run_info["handler"](app_config) 
+                
+                if success:
+                    mark_phase_complete(phase_to_run_id, phase_status)
+                else:
+                    con.print_error(f"'{phase_to_run_info['name']}' encountered an error or was not fully completed.")
+
+                if not con.confirm_action("Return to main menu?", default=True):
+                    con.print_info("Exiting Fedora AutoEnv Setup. Bye!")
+                    break
+            else:
+                con.print_warning("Invalid choice. Please try again.")
+    except Exception as e:
+        # con.console.print_exception(show_locals=True) # Rich traceback to console
+        app_logger.critical(f"An unexpected critical error occurred in the main application: {e}", exc_info=True) # Log with traceback
+        con.print_error(f"An unexpected critical error occurred: {e}. Check the log file for details.")
+
+
+    # In finally block:
+    finally:
+        app_logger.info("Fedora AutoEnv Setup script finished.")
+        con.print_info("Fedora AutoEnv Setup finished.")
 
 if __name__ == "__main__":
     try:
