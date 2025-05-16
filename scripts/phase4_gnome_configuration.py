@@ -549,6 +549,9 @@ def run_phase4(app_config: dict) -> bool:
     if overall_success:
         app_logger.info("Phase 4: GNOME Configuration & Extensions completed successfully.")
         con.print_success("Phase 4: GNOME Configuration & Extensions completed successfully.")
+        if phase4_config_data.get("gnome_extensions") or True: # True se abbiamo tentato di settare il tema
+            con.print_warning("IMPORTANT: A logout and login (or a GNOME Shell restart) "
+                              "is likely required for all theme and extension changes to take full effect.")
     else:
         app_logger.error("Phase 4: GNOME Configuration & Extensions completed with errors.")
         con.print_error("Phase 4: GNOME Configuration & Extensions completed with errors. Please review the output and log file.")
