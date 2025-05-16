@@ -2,6 +2,7 @@
 
 import json
 import sys
+import os # For os.geteuid() if we add root check
 from pathlib import Path
 from typing import Dict, List, Callable, Optional
 
@@ -10,9 +11,10 @@ from scripts import config_loader
 from scripts import phase1_system_preparation
 from scripts import phase2_basic_installation
 from scripts import phase3_terminal_enhancement
-from scripts import phase4_gnome_configuration
-from scripts import phase5_nvidia_installation
-from scripts import phase6_additional_packages
+from scripts import phase4_gnome_configuration # Import new phase
+from scripts import phase5_nvidia_installation # Import new phase
+from scripts import phase6_additional_packages # Import new phase
+
 
 # --- Constants ---
 STATUS_FILE_NAME = "install_status.json"
@@ -22,42 +24,41 @@ CONFIG_FILE_NAME = "packages.yaml" # Referenced by config_loader
 # These will also be the keys in our status file.
 PHASES = {
     "phase1_system_preparation": {
-        "name": "Phase 1: System Preparation",
-        "description": "Initial system checks and dnf5 setup.",
+        "name": "Phase 1: System Preparation ⚙️",
+        "description": "Initial system checks, DNF configuration, RPM Fusion, DNS, system update, Flathub, and hostname.",
         "dependencies": [],
         "handler": phase1_system_preparation.run_phase1
     },
     "phase2_basic_configuration": {
-        "name": "Phase 2: Basic System Package Configuration",
-        "description": "Install essential CLI tools, Python, Zsh, etc.",
+        "name": "Phase 2: Basic System Package Configuration 📦",
+        "description": "Install essential CLI tools, Python, Zsh, media codecs, etc.",
         "dependencies": ["phase1_system_preparation"],
         "handler": phase2_basic_installation.run_phase2
     },
     "phase3_terminal_enhancement": {
-        "name": "Phase 3: Terminal Enhancement",
-        "description": "Install Zsh plugins (Oh My Zsh assumed for paths).",
+        "name": "Phase 3: Terminal Enhancement 💻✨",
+        "description": "Set up Zsh, install plugins (Oh My Zsh assumed for paths), and copy custom configs.",
         "dependencies": ["phase2_basic_configuration"], # Depends on Zsh and git
         "handler": phase3_terminal_enhancement.run_phase3
     },
     "phase4_gnome_configuration": {
-        "name": "Phase 4: GNOME Configuration & Extensions",
-        "description": "Install GNOME Tweaks, Extension Manager, and extensions.",
-        "dependencies": ["phase2_basic_configuration"], # Might depend on basic tools
+        "name": "Phase 4: GNOME Configuration & Extensions 🎨🖼️",
+        "description": "Install GNOME Tweaks, Extension Manager, and configured extensions.",
+        "dependencies": ["phase1_system_preparation", "phase2_basic_configuration"], # Flatpak setup in P1, pip in P2
         "handler": phase4_gnome_configuration.run_phase4
     },
     "phase5_nvidia_installation": {
-        "name": "Phase 5: NVIDIA Driver Installation",
-        "description": "Setup RPM Fusion and install NVIDIA drivers.",
-        "dependencies": ["phase1_system_preparation", "phase2_basic_configuration"], # Depends on dnf and core utils
+        "name": "Phase 5: NVIDIA Driver Installation 🎮🖥️",
+        "description": "Install NVIDIA proprietary or open kernel drivers. Requires compatible GPU and user confirmation.",
+        "dependencies": ["phase1_system_preparation"], # Depends on DNF, RPM Fusion setup from Phase 1
         "handler": phase5_nvidia_installation.run_phase5
     },
     "phase6_additional_packages": {
-        "name": "Phase 6: Additional User Packages",
-        "description": "Install applications like GIMP, Spotify, Steam, etc.",
-        "dependencies": ["phase2_basic_configuration"], # General dependency
+        "name": "Phase 6: Additional User Packages 🧩🌐",
+        "description": "Install user-selected applications from DNF and Flatpak.",
+        "dependencies": ["phase1_system_preparation", "phase2_basic_configuration"],
         "handler": phase6_additional_packages.run_phase6
     }
-    # Add more phases here as needed
 }
 
 # Path to the status file (in the same directory as install.py)
@@ -71,7 +72,6 @@ def load_phase_status() -> Dict[str, bool]:
         try:
             with open(STATUS_FILE_PATH, 'r', encoding='utf-8') as f:
                 status = json.load(f)
-                # Ensure all known phases are in the status, default to False if not
                 for phase_id in PHASES:
                     if phase_id not in status:
                         status[phase_id] = False
@@ -108,29 +108,9 @@ def are_dependencies_met(phase_id: str, status: Dict[str, bool]) -> bool:
             return False
     return True
 
-# --- Placeholder for Actual Phase Execution ---
-
-def run_phase_placeholder(phase_id: str) -> bool:
-    """
-    Placeholder function for running a phase.
-    In a real scenario, this would call the specific script/functions for the phase.
-    """
-    con.print_step(f"Executing: {PHASES[phase_id]['name']}")
-    con.print_info(f"Running placeholder logic for {phase_id}...")
-    # Simulate work
-    import time
-    time.sleep(1) # Simulate some work being done
-
-    # Simulate success or failure (can be made more interactive or deterministic later)
-    # For now, assume success for the placeholder
-    succeeded = True # con.confirm_action(f"Did '{PHASES[phase_id]['name']}' complete successfully?", default=True)
-
-    if succeeded:
-        con.print_success(f"Placeholder for '{PHASES[phase_id]['name']}' completed.")
-        return True
-    else:
-        con.print_error(f"Placeholder for '{PHASES[phase_id]['name']}' reported failure.")
-        return False
+# Placeholder is no longer needed as actual handlers are used.
+# def run_phase_placeholder(phase_id: str, app_config: dict) -> bool:
+#     ...
 
 # --- Main Menu and Application Logic ---
 
@@ -140,47 +120,71 @@ def display_main_menu(phase_status: Dict[str, bool]):
     con.print_info("Select a phase to run, or 'q' to quit.")
     con.print_rule()
 
-    menu_items: Dict[str, str] = {}
+    menu_items: Dict[str, str] = {} # Maps menu number (str) to phase_id (str)
     item_number = 1
 
-    for phase_id, phase_info in PHASES.items():
+    # Sort phases for consistent display order, e.g., by key
+    # sorted_phase_ids = sorted(PHASES.keys()) # Or define a specific order if needed
+
+    for phase_id, phase_info in PHASES.items(): # Using dict order (Python 3.7+)
         status_text = ""
         can_run = are_dependencies_met(phase_id, phase_status)
 
         if phase_status.get(phase_id, False):
             status_text = "[bold green](Completed)[/]"
         elif not can_run:
-            deps_str = ", ".join([PHASES[dep]["name"] for dep in phase_info["dependencies"] if not phase_status.get(dep, False)])
+            # Get names of unmet dependencies
+            unmet_deps_names = [
+                PHASES[dep_id]["name"]
+                for dep_id in phase_info["dependencies"]
+                if not phase_status.get(dep_id, False)
+            ]
+            deps_str = ", ".join(unmet_deps_names)
             status_text = f"[bold yellow](Locked - Needs: {deps_str})[/]"
         else:
             status_text = "[cyan](Available)[/]"
 
         menu_label = f"{item_number}. {phase_info['name']} {status_text}"
         con.console.print(menu_label)
-        if can_run and not phase_status.get(phase_id, False):
+        
+        # Allow selection if (available and not completed) OR (completed and can_run - for re-running)
+        if (can_run and not phase_status.get(phase_id, False)) or \
+           (phase_status.get(phase_id, False) and can_run):
             menu_items[str(item_number)] = phase_id
-        elif phase_status.get(phase_id, False) and can_run : # Allow re-running completed
-             menu_items[str(item_number)] = phase_id
-
         item_number += 1
-
+    
     con.print_rule()
     con.console.print(" q. Quit")
     return menu_items
 
 def main():
     """Main function to run the Fedora AutoEnv Setup utility."""
-    # Load configuration (optional here, but good practice if phases need it)
-    # app_config = config_loader.load_configuration()
-    # if not app_config:
-    #     con.print_error("Failed to load 'packages.yaml'. Please ensure it exists and is valid.", exit_after=True)
-    #     sys.exit(1) # Redundant due to exit_after but explicit
+    
+    # Check if running as root, many phases need it
+    # if os.geteuid() != 0:
+    #     con.print_error("This script needs to be run with sudo or as root for many operations.", exit_after=True)
+    #     sys.exit(1)
+    # Note: Some phases determine target_user from SUDO_USER, so running via `sudo ./install.py` is preferred.
+
+    # Load application-wide configuration from packages.yaml
+    app_config = config_loader.load_configuration(CONFIG_FILE_NAME) # Explicitly pass filename
+    if not app_config: # load_configuration returns {} on error or empty file
+        # Check if the file itself is missing, as load_configuration prints detailed errors
+        if not Path(CONFIG_FILE_NAME).is_file():
+            con.print_error(f"Critical: Configuration file '{CONFIG_FILE_NAME}' not found in project root or current directory.", exit_after=True)
+        else:
+            # File exists but is empty, or parsing failed (error already printed by loader)
+            con.print_error(f"Critical: Failed to load or parse '{CONFIG_FILE_NAME}'. Please ensure it exists and is valid. Check messages above.", exit_after=True)
+        sys.exit(1) # exit_after=True should handle this, but being explicit.
 
     phase_status = load_phase_status()
 
     while True:
         menu_options = display_main_menu(phase_status)
-        choice = con.ask_question("Enter your choice:", choices=list(menu_options.keys()) + ['q']).lower()
+        # Generate choice list for Prompt.ask dynamically
+        valid_choices = list(menu_options.keys()) + ['q', 'Q']
+        
+        choice = con.ask_question("Enter your choice:", choices=valid_choices).lower()
 
         if choice == 'q':
             con.print_info("Exiting Fedora AutoEnv Setup. Bye!")
@@ -189,27 +193,29 @@ def main():
             phase_to_run_id = menu_options[choice]
             phase_to_run_info = PHASES[phase_to_run_id]
 
-            # Double check dependencies before running (menu should prevent this, but good practice)
             if not are_dependencies_met(phase_to_run_id, phase_status):
+                # This check is somewhat redundant due to menu display logic, but safe
                 con.print_warning(f"Cannot run '{phase_to_run_info['name']}'. Dependencies not met.")
-                con.ask_question("Press Enter to continue...") # Pause
+                con.ask_question("Press Enter to continue...")
                 continue
 
-            if phase_status.get(phase_to_run_id, False):
+            if phase_status.get(phase_to_run_id, False): # If phase is marked complete
                 if not con.confirm_action(f"'{phase_to_run_info['name']}' is already marked as complete. Run again?", default=False):
                     continue
 
-            con.print_info(f"Starting '{phase_to_run_info['name']}'...")
-            # --- Actual phase execution would happen here ---
-            # For now, we call the handler defined in PHASES, which is a placeholder
-            success = phase_to_run_info["handler"]()
-            # -----------------------------------------------
+            con.print_info(f"\nStarting '{phase_to_run_info['name']}'...")
+            
+            # *** THE FIX IS HERE: Pass app_config to the handler ***
+            success = phase_to_run_info["handler"](app_config) 
+            
             if success:
                 mark_phase_complete(phase_to_run_id, phase_status)
             else:
-                con.print_error(f"'{phase_to_run_info['name']}' encountered an error or was cancelled.")
+                con.print_error(f"'{phase_to_run_info['name']}' encountered an error or was not fully completed.")
 
-            con.ask_question("Press Enter to return to the menu...") # Pause
+            if not con.confirm_action("Return to main menu?", default=True):
+                con.print_info("Exiting Fedora AutoEnv Setup. Bye!")
+                break
         else:
             con.print_warning("Invalid choice. Please try again.")
 
@@ -219,9 +225,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         con.print_info("\nOperation cancelled by user. Exiting.")
     except Exception as e:
-        con.print_error(f"An unexpected error occurred: {e}")
-        # For debugging, you might want to print the full traceback
-        # import traceback
-        # traceback.print_exc()
+        con.console.print_exception(show_locals=True) # Rich traceback for debugging
+        con.print_error(f"An unexpected critical error occurred in the main application: {e}")
     finally:
         con.print_info("Fedora AutoEnv Setup finished.")
