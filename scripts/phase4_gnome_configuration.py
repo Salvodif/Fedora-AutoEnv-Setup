@@ -76,7 +76,6 @@ def _install_dnf_packages_ph4(packages: List[str]) -> bool:
         con.print_success(f"DNF packages installed/verified: {', '.join(packages)}")
         return True
     except Exception: 
-        # Error already logged by system_utils.run_command
         return False
 
 def _install_pip_packages_ph4(packages: List[str], target_user: str) -> bool:
@@ -117,7 +116,6 @@ def _verify_gext_cli_usability(target_user: str) -> bool:
     con.print_info(f"Verifying gnome-extensions-cli usability for user '{target_user}'...")
     check_cmd_str = f"dbus-run-session -- python3 -m {GEXT_CLI_MODULE} --version"
     try:
-        # Pass as a string with shell=True because dbus-run-session often works better this way for complex commands
         system_utils.run_command(
             check_cmd_str, 
             run_as_user=target_user, 
@@ -209,9 +207,8 @@ def _install_git_extension(ext_name: str, ext_cfg: Dict, target_user: str) -> bo
     elif install_script_name.lower() == "make": 
         install_script_command_part = "make"
     elif install_script_name.endswith(".sh"): 
-        install_script_command_part = f"./{shlex.quote(install_script_name)}" # Assumes install_script_name is simple filename
+        install_script_command_part = f"./{shlex.quote(install_script_name)}"
     else: 
-        # Fallback for other script names, assuming they are directly executable from repo root
         install_script_command_part = shlex.quote(install_script_name) 
     
     repo_name_from_url = Path(git_url).name.removesuffix(".git") if Path(git_url).name.endswith(".git") else Path(git_url).name
@@ -231,7 +228,6 @@ def _install_git_extension(ext_name: str, ext_cfg: Dict, target_user: str) -> bo
         echo "Current directory for install: $(pwd)"
         echo "Running install script command: {install_script_command_part}..."
         
-        # Make .sh scripts executable (using the Python variable `install_script_name` which is the simple filename)
         if [ -f "{install_script_name}" ] && [[ "{install_script_name}" == *.sh ]]; then
             chmod +x "{install_script_name}"
         fi
@@ -283,69 +279,76 @@ def _install_git_extension(ext_name: str, ext_cfg: Dict, target_user: str) -> bo
 
 def _set_dark_theme_preference(target_user: str) -> bool:
     """Sets the GNOME desktop interface color-scheme to 'prefer-dark' and attempts to set Adwaita-dark GTK theme."""
-    con.print_sub_step(f"Setting color-scheme to 'prefer-dark' for user '{target_user}'...")
+    con.print_sub_step(f"Attempting to set system appearance to dark mode for user '{target_user}'...")
     
     schema = "org.gnome.desktop.interface"
+    
+    # 1. Set color-scheme to prefer-dark
     color_scheme_key = "color-scheme"
-    color_scheme_value = "prefer-dark" # No single quotes needed when passing as list items
-    gtk_theme_key = "gtk-theme"
-    gtk_theme_value = "Adwaita-dark"   # No single quotes needed
-
+    color_scheme_value = "prefer-dark" 
+    
+    con.print_info(f"Setting GSettings: {schema} {color_scheme_key} to '{color_scheme_value}' (as {target_user})")
+    # Construct command as a list of arguments for dbus-run-session
+    cmd_color_scheme = ["dbus-run-session", "--", "gsettings", "set", schema, color_scheme_key, color_scheme_value]
+    
     success_color_scheme = False
     try:
-        cmd_color_scheme = ["dbus-run-session", "--", "gsettings", "set", schema, color_scheme_key, color_scheme_value]
-        con.print_info(f"Executing: {' '.join(cmd_color_scheme)} (as {target_user})")
         system_utils.run_command(
             cmd_color_scheme,
             run_as_user=target_user,
-            shell=False, # Passing as list
+            shell=False, # dbus-run-session is the executable, args are passed directly
             capture_output=True,
-            check=True,
+            check=True, # Fail if this primary setting cannot be applied
             print_fn_info=con.print_info,
             print_fn_error=con.print_error
         )
-        con.print_success(f"GSettings: '{schema} {color_scheme_key}' set to '{color_scheme_value}' for '{target_user}'.")
+        con.print_success(f"GSettings: '{schema} {color_scheme_key}' successfully set to '{color_scheme_value}'.")
         success_color_scheme = True
-    except FileNotFoundError:
-        con.print_error(f"'gsettings' or 'dbus-run-session' command not found. Cannot set color-scheme for '{target_user}'.")
-        return False # If gsettings is missing, no point trying further.
+    except FileNotFoundError: 
+        con.print_error(f"'gsettings' or 'dbus-run-session' command not found. Cannot set dark theme for '{target_user}'.")
+        return False 
     except subprocess.CalledProcessError as e:
-        con.print_error(f"Failed to set '{color_scheme_key}' for user '{target_user}'. Command: {' '.join(e.cmd)}")
+        con.print_error(f"Failed to set GSettings '{schema} {color_scheme_key}'. Command: {' '.join(e.cmd)}")
         if e.stdout: con.print_error(f"STDOUT: {e.stdout.strip()}")
         if e.stderr: con.print_error(f"STDERR: {e.stderr.strip()}")
-        # Do not return False yet, still try gtk-theme if primary failed but gsettings is there.
+        # This is considered a failure for setting the dark theme preference.
     except Exception as e:
-        con.print_error(f"Unexpected error setting '{color_scheme_key}' for '{target_user}': {e}")
-        # Do not return False yet.
+        con.print_error(f"An unexpected error occurred while setting '{color_scheme_key}' for '{target_user}': {e}")
+        # This is also a failure.
 
-    # Attempt to set GTK theme to Adwaita-dark
-    con.print_sub_step(f"Attempting to set gtk-theme to '{gtk_theme_value}' for user '{target_user}'...")
+    # 2. Optionally, attempt to set GTK theme to Adwaita-dark for better consistency
+    # This is a "best effort" and not critical if it fails, as 'prefer-dark' is the main switch.
+    # We try this regardless of previous specific error, as long as gsettings was found.
+    gtk_theme_key = "gtk-theme"
+    gtk_theme_value = "Adwaita-dark" 
+
+    con.print_info(f"Attempting to set GSettings: {schema} {gtk_theme_key} to '{gtk_theme_value}' (as {target_user})")
+    cmd_gtk_theme = ["dbus-run-session", "--", "gsettings", "set", schema, gtk_theme_key, gtk_theme_value]
     try:
-        cmd_gtk_theme = ["dbus-run-session", "--", "gsettings", "set", schema, gtk_theme_key, gtk_theme_value]
-        con.print_info(f"Executing: {' '.join(cmd_gtk_theme)} (as {target_user})")
         system_utils.run_command(
             cmd_gtk_theme,
             run_as_user=target_user,
-            shell=False,
+            shell=False, 
             capture_output=True,
-            check=False, # Don't make this a fatal error for the function if Adwaita-dark isn't found/settable
+            check=False, # Do not make the entire phase fail if Adwaita-dark isn't found or settable
             print_fn_info=con.print_info,
-            print_fn_error=con.print_error # This will still log if dnf fails, but won't raise exception
+            print_fn_error=con.print_error 
         )
-        # No specific success message here as it's check=False, but run_command logs output
-        con.print_info(f"Attempted to set GSettings: '{schema} {gtk_theme_key}' to '{gtk_theme_value}'.")
+        con.print_info(f"Attempt to set GSettings '{gtk_theme_key}' to '{gtk_theme_value}' completed.")
     except FileNotFoundError:
-         # This would have been caught by the first gsettings call if gsettings/dbus-run-session is missing
-        pass
-    except Exception as e:
+        # This path is unlikely if the first gsettings call didn't hit it,
+        # but included for theoretical completeness.
+        con.print_warning(f"Could not attempt to set '{gtk_theme_key}' due to missing command (unexpected).")
+    except Exception as e: # Includes CalledProcessError if check=True, but here check=False
         con.print_warning(f"Could not set '{gtk_theme_key}' for '{target_user}': {e}. This might be non-critical.")
 
     if success_color_scheme:
-        con.print_info("GNOME theme preferences applied. A logout/login might be needed for changes to fully reflect everywhere.")
+        con.print_info("GNOME dark mode preference applied. A logout/login or restart of GNOME Shell might be needed for changes to fully reflect everywhere.")
     else:
-        con.print_warning("Primary color-scheme setting failed. Dark mode might not be fully applied.")
+        con.print_warning("Setting primary dark mode (color-scheme) failed. Appearance might not change.")
         
-    return success_color_scheme # Success of this function depends on the primary 'prefer-dark'
+    return success_color_scheme
+
 
 # --- Main Phase Function ---
 
@@ -377,7 +380,6 @@ def run_phase4(app_config: dict) -> bool:
 
     # Step 2: Install pip packages
     con.print_info(f"\nStep 2: Installing pip packages for user '{target_user}'...")
-    # Ensure you use the correct key from your YAML (e.g., "pip_packages" or "pip")
     pip_packages_to_install = phase4_config_data.get("pip_packages", []) 
     if pip_packages_to_install:
         if not _install_pip_packages_ph4(pip_packages_to_install, target_user): overall_success = False
@@ -399,12 +401,12 @@ def run_phase4(app_config: dict) -> bool:
         if gnome_extensions_cfg: 
             con.print_info(f"\nStep 4: Installing and enabling GNOME Shell Extensions for user '{target_user}'...")
             extensions_success_all = True
-            for ext_key_name, ext_config_dict in gnome_extensions_cfg.items():
-                ext_type = ext_config_dict.get("type"); pretty_name = ext_config_dict.get("name", ext_key_name)
+            for ext_key__name, ext_config_dict in gnome_extensions_cfg.items(): # Renamed ext_key_name to avoid conflict
+                ext_type = ext_config_dict.get("type"); pretty_name = ext_config_dict.get("name", ext_key_name) # Used ext_key_name from loop
                 con.print_sub_step(f"Processing extension: {pretty_name} (Type: {ext_type})")
                 success_current_ext = False
-                if ext_type == "ego": success_current_ext = _install_ego_extension(ext_key_name, ext_config_dict, target_user)
-                elif ext_type == "git": success_current_ext = _install_git_extension(ext_key_name, ext_config_dict, target_user)
+                if ext_type == "ego": success_current_ext = _install_ego_extension(ext_key_name, ext_config_dict, target_user) # Used ext_key_name from loop
+                elif ext_type == "git": success_current_ext = _install_git_extension(ext_key_name, ext_config_dict, target_user) # Used ext_key_name from loop
                 else: con.print_warning(f"Unknown GNOME ext type '{ext_type}' for '{pretty_name}'. Skip."); extensions_success_all = False 
                 if not success_current_ext: extensions_success_all = False 
             if not extensions_success_all: overall_success = False; con.print_warning("Some GNOME extensions failed.")
@@ -424,8 +426,7 @@ def run_phase4(app_config: dict) -> bool:
     con.print_info("\nStep 6: Setting system theme preference to dark mode...")
     if not _set_dark_theme_preference(target_user):
         con.print_warning(f"Failed to fully set dark theme preference for user '{target_user}'. Appearance might not be dark.")
-        # Decide if this should mark overall_success as False. For now, it's a warning.
-        # overall_success = False 
+        # overall_success = False # Uncomment if this is critical for phase success
 
     if overall_success:
         con.print_success("Phase 4: GNOME Configuration & Extensions completed successfully.")
