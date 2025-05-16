@@ -12,52 +12,92 @@ from scripts import system_utils
 
 # --- Phase Specific Functions ---
 
-def _install_dnf_packages(packages: list[str]) -> bool:
-    """Installs a list of DNF packages."""
+def _install_dnf_packages(packages: list[str], allow_erasing: bool = False) -> bool:
+    """
+    Installs a list of DNF packages.
+
+    Args:
+        packages (list[str]): A list of package names to install.
+        allow_erasing (bool): If True, adds '--allowerasing' to the DNF command.
+
+    Returns:
+        bool: True if all packages were processed successfully, False otherwise.
+    """
     if not packages:
         con.print_info("No DNF packages specified for this sub-task.")
         return True
 
-    con.print_sub_step(f"Installing DNF packages: {', '.join(packages)}")
+    action_verb = "Installing"
+    if allow_erasing:
+        action_verb = "Installing (allowing erasing)"
+
+    con.print_sub_step(f"{action_verb} DNF packages: {', '.join(packages)}")
     try:
-        cmd = ["sudo", "dnf", "install", "-y"] + packages
+        cmd = ["sudo", "dnf", "install", "-y"]
+        if allow_erasing:
+            cmd.append("--allowerasing") # Add flag if true
+        cmd.extend(packages)
+        
         system_utils.run_command(
             cmd, capture_output=True,
             print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step
         )
-        con.print_success(f"DNF packages installed: {', '.join(packages)}")
+        con.print_success(f"DNF packages processed: {', '.join(packages)}")
         return True
     except Exception: # Error already logged by run_command
+        # run_command will have printed detailed errors.
+        # This function returning False will be caught by the main phase logic.
         return False
 
 def _install_dnf_groups(groups: list[str], group_type_name: str) -> bool:
-    """Installs a list of DNF groups."""
+    """
+    Installs a list of DNF groups.
+
+    Args:
+        groups (list[str]): A list of group IDs or names to install.
+        group_type_name (str): A descriptive name for the type of groups being installed.
+
+    Returns:
+        bool: True if all groups were processed successfully, False otherwise.
+    """
     if not groups:
         con.print_info(f"No DNF {group_type_name} groups specified for installation.")
         return True
 
     con.print_sub_step(f"Installing DNF {group_type_name} groups: {', '.join(groups)}")
     all_successful = True
-    for group in groups:
+    for group_id_or_name in groups:
         try:
-            cmd = ["sudo", "dnf", "group", "install", "-y", group]
+            # Added --allowerasing for robustness, in case group packages conflict
+            # or conflict with already installed packages.
+            cmd = ["sudo", "dnf", "group", "install", "-y", "--allowerasing", group_id_or_name]
             system_utils.run_command(
                 cmd, capture_output=True,
                 print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step
             )
-            con.print_success(f"DNF group '{group}' installed successfully.")
+            con.print_success(f"DNF group '{group_id_or_name}' processed successfully.")
         except Exception:
             # Error for this specific group already logged by run_command
+            con.print_error(f"Failed to process DNF group '{group_id_or_name}'.")
             all_successful = False
     return all_successful
 
 def _swap_dnf_package(from_pkg: str, to_pkg: str) -> bool:
-    """Swaps one DNF package for another."""
+    """
+    Swaps one DNF package for another, allowing erasing of conflicting packages.
+
+    Args:
+        from_pkg (str): The package name to swap from.
+        to_pkg (str): The package name to swap to.
+
+    Returns:
+        bool: True if the swap was successful or `to_pkg` was installed directly, False otherwise.
+    """
     if not from_pkg or not to_pkg:
         con.print_error("Invalid 'from' or 'to' package name for DNF swap.")
         return False
 
-    con.print_sub_step(f"Attempting to swap DNF package '{from_pkg}' with '{to_pkg}'...")
+    con.print_sub_step(f"Attempting to swap DNF package '{from_pkg}' with '{to_pkg}' (allowing erasing)...")
     try:
         # Check if the 'from' package is installed
         check_cmd = ["rpm", "-q", from_pkg]
@@ -68,10 +108,12 @@ def _swap_dnf_package(from_pkg: str, to_pkg: str) -> bool:
 
         if check_proc.returncode != 0: # from_pkg is not installed
             con.print_info(f"Package '{from_pkg}' is not installed. Attempting direct install of '{to_pkg}'.")
-            return _install_dnf_packages([to_pkg]) # Try to install the target package directly
+            # When installing directly, --allowerasing is also useful
+            return _install_dnf_packages([to_pkg], allow_erasing=True)
 
         # If 'from_pkg' is installed, proceed with swap
-        swap_cmd = ["sudo", "dnf", "swap", "-y", from_pkg, to_pkg]
+        # Added --allowerasing to the swap command
+        swap_cmd = ["sudo", "dnf", "swap", "-y", "--allowerasing", from_pkg, to_pkg]
         system_utils.run_command(
             swap_cmd, capture_output=True,
             print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step
@@ -80,44 +122,11 @@ def _swap_dnf_package(from_pkg: str, to_pkg: str) -> bool:
         return True
     except Exception: 
         # Error already logged by run_command or _install_dnf_packages
-        con.print_warning(f"Failed to swap '{from_pkg}' with '{to_pkg}'. This might be due to '{to_pkg}' not being available in the currently configured repositories.")
+        con.print_warning(f"Failed to swap '{from_pkg}' with '{to_pkg}'. This might be due to '{to_pkg}' not being available or unresolved conflicts even with --allowerasing.")
         return False
 
-def _handle_multimedia_group_operations(opts: dict, group_name_key: str = "group", operation: str = "upgrade") -> bool:
-    """Handles DNF group operations (e.g., upgrade) with specific options from config."""
-    group_name = opts.get(group_name_key)
-    if not group_name:
-        con.print_error(f"Missing '{group_name_key}' in DNF multimedia options configuration.")
-        return False
-
-    con.print_sub_step(f"Performing DNF group {operation} on '{group_name}' with custom options...")
-    cmd = ["sudo", "dnf", "group", operation, "-y"]
-
-    setopt_val = opts.get("setopt")
-    if setopt_val:
-        # Ensure it's correctly formatted as --setopt=key=value
-        if not str(setopt_val).startswith("--setopt="):
-            setopt_val = f"--setopt={setopt_val}"
-        cmd.append(str(setopt_val))
-
-    exclude_val = opts.get("exclude")
-    if exclude_val:
-        # Ensure it's correctly formatted as --exclude=PackageName
-        if not str(exclude_val).startswith("--exclude="):
-            exclude_val = f"--exclude={exclude_val}"
-        cmd.append(str(exclude_val))
-    
-    cmd.append(group_name) # The group name itself (e.g., "@multimedia")
-
-    try:
-        system_utils.run_command(
-            cmd, capture_output=True,
-            print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step
-        )
-        con.print_success(f"DNF group {operation} on '{group_name}' completed successfully.")
-        return True
-    except Exception: # Error already logged by run_command
-        return False
+# The _handle_multimedia_group_operations function was removed as its corresponding
+# YAML configuration 'dnf_multimedia_upgrade_opts' was removed.
 
 # --- Main Phase Function ---
 
@@ -136,44 +145,45 @@ def run_phase2(app_config: dict) -> bool:
     con.print_info("Step 1: Installing general DNF packages...")
     dnf_packages_to_install = phase2_config.get("dnf_packages", [])
     if dnf_packages_to_install:
-        if not _install_dnf_packages(dnf_packages_to_install):
+        # Using allow_erasing=True for general packages as well for robustness
+        if not _install_dnf_packages(dnf_packages_to_install, allow_erasing=True):
             overall_success = False
-            con.print_error("Failed to install some general DNF packages. See details above.")
+            # _install_dnf_packages already logs errors
     else:
         con.print_info("No general DNF packages listed for installation in Phase 2.")
 
     # 2. Handle Media Codec specific configurations
     con.print_info("\nStep 2: Configuring Media Codecs...")
 
-    # 2a. Install dnf_groups_multimedia (e.g., "multimedia" group)
-    multimedia_groups = phase2_config.get("dnf_groups_multimedia", [])
-    if multimedia_groups:
-        if not _install_dnf_groups(multimedia_groups, "multimedia support"):
-            overall_success = False # Mark failure if any group install fails
+    # 2a. Logic for 'dnf_groups_multimedia' was removed as the group was problematic/non-existent.
+    con.print_info("Skipping 'dnf_groups_multimedia' installation as it has been removed from the configuration workflow.")
     
-    # 2b. Perform dnf_swap_ffmpeg (e.g., ffmpeg-free to ffmpeg)
+    # 2b. Perform dnf_swap_ffmpeg (e.g., ffmpeg-free to ffmpeg) - RETAINED
     ffmpeg_swap_config = phase2_config.get("dnf_swap_ffmpeg")
     if ffmpeg_swap_config:
         from_pkg = ffmpeg_swap_config.get("from")
         to_pkg = ffmpeg_swap_config.get("to")
         if from_pkg and to_pkg:
-            if not _swap_dnf_package(from_pkg, to_pkg):
-                overall_success = False # Mark failure if swap fails
+            if not _swap_dnf_package(from_pkg, to_pkg): # Already updated with --allowerasing
+                overall_success = False 
         else:
             con.print_warning("Incomplete 'dnf_swap_ffmpeg' configuration in YAML. Skipping swap.")
-            # overall_success = False # Consider if this is a critical config error
+    else:
+        con.print_info("No 'dnf_swap_ffmpeg' configuration found. Skipping ffmpeg swap.")
 
-    # 2c. Handle dnf_multimedia_upgrade_opts (e.g., upgrade @multimedia with options)
-    multimedia_opts_config = phase2_config.get("dnf_multimedia_upgrade_opts")
-    if multimedia_opts_config:
-        if not _handle_multimedia_group_operations(multimedia_opts_config, operation="upgrade"):
-            overall_success = False # Mark failure if this operation fails
+
+    # 2c. Logic for 'dnf_multimedia_upgrade_opts' was removed.
+    con.print_info("Skipping 'dnf_multimedia_upgrade_opts' as it has been removed from the configuration workflow.")
             
-    # 2d. Install dnf_groups_sound_video (e.g., "sound-and-video" group)
+    # 2d. Install dnf_groups_sound_video (e.g., "sound-and-video" group) - RETAINED
+    # This assumes "sound-and-video" (or its equivalent from your YAML) is a valid group ID.
     sound_video_groups = phase2_config.get("dnf_groups_sound_video", [])
     if sound_video_groups:
-        if not _install_dnf_groups(sound_video_groups, "sound and video support"):
-            overall_success = False # Mark failure if any group install fails
+        if not _install_dnf_groups(sound_video_groups, "sound and video support"): # _install_dnf_groups uses --allowerasing
+            overall_success = False 
+    else:
+        con.print_info("No 'dnf_groups_sound_video' listed for installation.")
+
 
     if overall_success:
         con.print_success("Phase 2: Basic System Package Configuration completed successfully.")

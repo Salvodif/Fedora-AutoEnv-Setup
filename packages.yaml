@@ -23,15 +23,9 @@ phase2_basic_configuration:
     - "powerline-fonts" # General purpose nice fonts
     - "bat" # Cat clone with syntax highlighting
     - "fzf" # Command-line fuzzy finder
-  dnf_groups_multimedia: # For _install_media_codecs
-    - "multimedia"
   dnf_swap_ffmpeg: # For _install_media_codecs
     from: "ffmpeg-free"
     to: "ffmpeg"
-  dnf_multimedia_upgrade_opts: # For _install_media_codecs (currently hardcoded in script, example if you want to externalize)
-    group: "@multimedia"
-    setopt: "--setopt=install_weak_deps=False"
-    exclude: "--exclude=PackageKit-gstreamer-plugin"
   dnf_groups_sound_video: # For _install_media_codecs
     - "sound-and-video"
 
