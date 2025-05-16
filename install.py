@@ -10,6 +10,9 @@ from scripts import config_loader
 from scripts import phase1_system_preparation
 from scripts import phase2_basic_installation
 from scripts import phase3_terminal_enhancement
+from scripts import phase4_gnome_configuration
+from scripts import phase5_nvidia_installation
+from scripts import phase6_additional_packages
 
 # --- Constants ---
 STATUS_FILE_NAME = "install_status.json"
@@ -40,19 +43,19 @@ PHASES = {
         "name": "Phase 4: GNOME Configuration & Extensions",
         "description": "Install GNOME Tweaks, Extension Manager, and extensions.",
         "dependencies": ["phase2_basic_configuration"], # Might depend on basic tools
-        "handler": lambda: run_phase_placeholder("phase4_gnome_configuration") # Placeholder
+        "handler": phase4_gnome_configuration.run_phase4
     },
     "phase5_nvidia_installation": {
         "name": "Phase 5: NVIDIA Driver Installation",
         "description": "Setup RPM Fusion and install NVIDIA drivers.",
         "dependencies": ["phase1_system_preparation", "phase2_basic_configuration"], # Depends on dnf and core utils
-        "handler": lambda: run_phase_placeholder("phase5_nvidia_installation") # Placeholder
+        "handler": phase5_nvidia_installation.run_phase5
     },
     "phase6_additional_packages": {
         "name": "Phase 6: Additional User Packages",
         "description": "Install applications like GIMP, Spotify, Steam, etc.",
         "dependencies": ["phase2_basic_configuration"], # General dependency
-        "handler": lambda: run_phase_placeholder("phase6_additional_packages") # Placeholder
+        "handler": phase6_additional_packages.run_phase6
     }
     # Add more phases here as needed
 }

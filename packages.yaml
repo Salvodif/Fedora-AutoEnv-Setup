@@ -136,3 +136,5 @@ phase6_additional_packages:
     "com.spotify.Client": "Spotify (Music Streaming)"
     "com.discordapp.Discord": "Discord (Chat)"
     "com.obsproject.Studio": "OBS Studio (Screen Recording/Streaming)"
+    "com.usebottles.bottles": "Bottles lets you run Windows software on Linux"
+    "com.github.tchx84.Flatseal": "Flatseal is a graphical utility to review and modify permissions from your Flatpak applications"
