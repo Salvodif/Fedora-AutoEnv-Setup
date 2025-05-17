@@ -1,27 +1,30 @@
 # Fedora-AutoEnv-Setup/scripts/phase6_additional_packages.py
 
 import sys
-import shlex # For quoting in custom repo commands
+import shlex 
 from pathlib import Path
-from typing import List, Dict, Any # Added Any
+from typing import List, Dict, Any 
+import subprocess # For CalledProcessError in type hints
 
 # Adjust import path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scripts import console_output as con
 from scripts import config_loader
 from scripts import system_utils
+from scripts.logger_utils import app_logger
 
 # --- Helper Functions ---
 
 def _install_dnf_packages_ph6(packages: List[str]) -> bool:
     """Installs a list of DNF packages from already configured repositories."""
     if not packages:
+        app_logger.info("No standard DNF packages specified for installation in Phase 6.")
         con.print_info("No standard DNF packages specified for installation in Phase 6.")
         return True
 
+    app_logger.info(f"Attempting to install standard DNF packages: {packages}")
     con.print_sub_step(f"Installing standard DNF packages: {', '.join(packages)}")
     try:
-        # Add --allowerasing for robustness, in case of minor conflicts
         cmd = ["sudo", "dnf", "install", "-y", "--allowerasing"] + packages
         system_utils.run_command(
             cmd, 
@@ -29,150 +32,153 @@ def _install_dnf_packages_ph6(packages: List[str]) -> bool:
             check=True,
             print_fn_info=con.print_info, 
             print_fn_error=con.print_error, 
-            print_fn_sub_step=con.print_sub_step
+            print_fn_sub_step=con.print_sub_step,
+            logger=app_logger
         )
         con.print_success(f"Successfully processed standard DNF packages: {', '.join(packages)}")
+        app_logger.info(f"Successfully processed standard DNF packages: {packages}")
         return True
-    except Exception: 
-        con.print_error(f"Failed to install one or more standard DNF packages: {', '.join(packages)}. Check logs above.")
+    except Exception as e: 
+        app_logger.error(f"Failed to install one or more standard DNF packages: {packages}. Error: {e}", exc_info=True)
+        # Error already logged to console by system_utils.run_command via print_fn_error
         return False
 
 def _is_package_already_installed(pkg_name: str) -> bool:
     """Checks if a DNF package is already installed using 'rpm -q'."""
     if not pkg_name:
-        return False
+        return False # Cannot check an empty package name
+    app_logger.debug(f"Checking if package '{pkg_name}' is installed.")
     try:
-        # rpm -q returns 0 if installed, non-zero otherwise
         check_cmd = ["rpm", "-q", pkg_name]
-        proc = system_utils.run_command(check_cmd, capture_output=True, check=False, print_fn_info=None) # Suppress info for this check
-        return proc.returncode == 0
-    except FileNotFoundError: # rpm command not found
+        proc = system_utils.run_command(
+            check_cmd, 
+            capture_output=True, 
+            check=False, # rpm -q exits non-zero if not installed, which is not an error for this check
+            print_fn_info=None, # Suppress "Executing..." for this quiet check
+            logger=app_logger # Log the check command execution itself at debug level
+        )
+        if proc.returncode == 0:
+            app_logger.info(f"Package '{pkg_name}' is already installed.")
+            return True
+        else:
+            app_logger.info(f"Package '{pkg_name}' is not installed (rpm -q exit code: {proc.returncode}).")
+            return False
+    except FileNotFoundError: 
+        app_logger.warning("'rpm' command not found. Cannot accurately check if package is installed.")
         con.print_warning("'rpm' command not found. Cannot accurately check if package is installed.")
-        return False # Assume not installed if rpm is missing
+        return False 
     except Exception as e:
-        con.print_warning(f"Error checking if package '{pkg_name}' is installed: {e}")
-        return False # Assume not installed on error
+        app_logger.warning(f"Error checking if package '{pkg_name}' is installed: {e}", exc_info=True)
+        con.print_warning(f"Error checking if package '{pkg_name}' is installed.")
+        return False 
 
 def _install_custom_repo_dnf_package(pkg_key: str, pkg_config: Dict[str, Any]) -> bool:
     """
     Handles the installation of a DNF package that requires custom repository setup.
-    
-    Args:
-        pkg_key (str): The key from the YAML (e.g., "visual_studio_code").
-        pkg_config (Dict[str, Any]): The configuration dictionary for this package.
-
-    Returns:
-        bool: True if successful, False otherwise.
     """
     friendly_name = pkg_config.get("name", pkg_key)
     check_pkg_name = pkg_config.get("check_if_installed_pkg")
     repo_commands = pkg_config.get("repo_setup_commands", [])
-    # post_repo_cmd = pkg_config.get("post_repo_setup_command") # Example of how to get it
     dnf_install_pkg_name = pkg_config.get("dnf_package_to_install")
 
+    app_logger.info(f"Processing custom DNF package: {friendly_name} (Key: {pkg_key})")
     con.print_sub_step(f"Processing custom DNF package: {friendly_name}")
 
     if not dnf_install_pkg_name:
+        app_logger.error(f"Missing 'dnf_package_to_install' for '{friendly_name}' in configuration. Skipping.")
         con.print_error(f"Missing 'dnf_package_to_install' for '{friendly_name}' in configuration. Skipping.")
         return False
 
     if check_pkg_name and _is_package_already_installed(check_pkg_name):
+        app_logger.info(f"Package '{friendly_name}' (checked as '{check_pkg_name}') seems to be already installed. Skipping setup and installation.")
         con.print_info(f"Package '{friendly_name}' (checked as '{check_pkg_name}') seems to be already installed. Skipping setup and installation.")
         return True
 
-    # Execute repository setup commands
     if repo_commands:
+        app_logger.info(f"Running repository setup commands for {friendly_name}...")
         con.print_info(f"Running repository setup commands for {friendly_name}...")
-        for cmd_str in repo_commands:
+        for cmd_str_from_yaml in repo_commands:
+            app_logger.debug(f"Executing repo setup command: {cmd_str_from_yaml}")
             try:
-                # Commands like 'echo ... | sudo tee ...' need shell=True
-                # Ensure commands from YAML are safe or well-understood.
-                # For `rpm --import`, shell=False is fine if cmd_str is just the command.
-                # For `echo | sudo tee`, shell=True is required.
-                # Let's assume complex commands from YAML might need shell=True.
-                is_shell_needed = "|" in cmd_str or ">" in cmd_str or "<" in cmd_str or "&" in cmd_str
-                
-                # Most repo setup commands require root privileges, ensure 'sudo' is part of the command string
-                # or handle it by always running these as root if the script itself is sudo.
-                # The commands in YAML for vscode already include sudo.
                 system_utils.run_command(
-                    cmd_str, 
-                    shell=is_shell_needed, # Be cautious with shell=True and external strings
+                    cmd_str_from_yaml, 
+                    shell=True, # ALWAYS use shell=True for these YAML-defined full command strings
                     check=True,
-                    print_fn_info=con.print_info,
-                    print_fn_error=con.print_error
+                    print_fn_info=con.print_info, 
+                    print_fn_error=con.print_error,
+                    logger=app_logger
                 )
-            except Exception as e:
-                con.print_error(f"Failed to execute repository setup command for {friendly_name}: '{cmd_str}'. Error: {e}")
+            except Exception as e: 
+                app_logger.error(f"Failed to execute repository setup command for {friendly_name}: '{cmd_str_from_yaml}'. Error: {e}", exc_info=True)
+                con.print_error(f"Failed to execute repository setup command for {friendly_name}: '{cmd_str_from_yaml}'.")
                 return False
+        app_logger.info(f"Repository setup commands for {friendly_name} completed.")
         con.print_success(f"Repository setup commands for {friendly_name} completed.")
     
-    # Optional: Run a command after repo setup, e.g., dnf makecache
-    # For VS Code, 'dnf install code' will likely refresh metadata for the new repo automatically.
-    # If you had post_repo_cmd:
-    # if post_repo_cmd:
-    #     con.print_info(f"Running post-repository setup command for {friendly_name}: {post_repo_cmd}")
-    #     try:
-    #         system_utils.run_command(post_repo_cmd, shell=True, check=True, ...)
-    #     except Exception as e:
-    #         con.print_error(f"Post-repository setup command failed: {e}")
-    #         return False
-
-    # Install the DNF package
+    app_logger.info(f"Installing '{dnf_install_pkg_name}' for {friendly_name}...")
     con.print_info(f"Installing '{dnf_install_pkg_name}' for {friendly_name}...")
     try:
         install_cmd_list = ["sudo", "dnf", "install", "-y", "--allowerasing", dnf_install_pkg_name]
         system_utils.run_command(
             install_cmd_list,
-            capture_output=True, # Or False to see live output
+            capture_output=True, 
             check=True,
             print_fn_info=con.print_info,
-            print_fn_error=con.print_error
+            print_fn_error=con.print_error,
+            logger=app_logger
         )
+        app_logger.info(f"Successfully installed '{friendly_name}' ({dnf_install_pkg_name}).")
         con.print_success(f"Successfully installed '{friendly_name}' ({dnf_install_pkg_name}).")
         return True
     except Exception as e:
-        con.print_error(f"Failed to install DNF package '{dnf_install_pkg_name}' for {friendly_name}. Error: {e}")
+        app_logger.error(f"Failed to install DNF package '{dnf_install_pkg_name}' for {friendly_name}. Error: {e}", exc_info=True)
+        con.print_error(f"Failed to install DNF package '{dnf_install_pkg_name}' for {friendly_name}.")
         return False
 
 # --- Main Phase Function ---
 
 def run_phase6(app_config: dict) -> bool:
     """Executes Phase 6: Additional User Packages Installation."""
+    app_logger.info("Starting Phase 6: Additional User Packages.")
     con.print_step("PHASE 6: Additional User Packages")
     overall_success = True
     
     phase6_config = config_loader.get_phase_data(app_config, "phase6_additional_packages")
     if not phase6_config:
+        app_logger.warning("No configuration found for Phase 6 in YAML. Skipping phase.")
         con.print_warning("No configuration found for Phase 6. Skipping additional package installation.")
         return True 
 
     # 1. Install standard DNF packages
+    app_logger.info("Phase 6, Step 1: Installing standard DNF packages...")
     con.print_info("\nStep 1: Installing standard DNF packages...")
     dnf_packages_to_install = phase6_config.get("dnf_packages", [])
     if dnf_packages_to_install:
         if not _install_dnf_packages_ph6(dnf_packages_to_install):
             overall_success = False
     else:
+        app_logger.info("No standard DNF packages listed for Phase 6.")
         con.print_info("No standard DNF packages listed for installation in Phase 6.")
 
     # 2. Install DNF packages with custom repository setup
+    app_logger.info("Phase 6, Step 2: Installing DNF packages requiring custom repository setup...")
     con.print_info("\nStep 2: Installing DNF packages requiring custom repository setup...")
     custom_repo_pkgs = phase6_config.get("custom_repo_dnf_packages", {})
     if custom_repo_pkgs:
         for pkg_key, pkg_conf_dict in custom_repo_pkgs.items():
             if not isinstance(pkg_conf_dict, dict):
+                app_logger.warning(f"Invalid configuration for custom DNF package '{pkg_key}' in YAML. Expected a dictionary. Skipping.")
                 con.print_warning(f"Invalid configuration for custom DNF package '{pkg_key}'. Skipping.")
-                overall_success = False
+                overall_success = False # Mark as an issue
                 continue
             if not _install_custom_repo_dnf_package(pkg_key, pkg_conf_dict):
                 overall_success = False
-                # Error already logged by the helper function
     else:
+        app_logger.info("No custom repository DNF packages listed for Phase 6.")
         con.print_info("No custom repository DNF packages listed for installation in Phase 6.")
 
-
-    # 3. Install Flatpak applications (Step number adjusted)
+    # 3. Install Flatpak applications
+    app_logger.info("Phase 6, Step 3: Installing Flatpak applications...")
     con.print_info("\nStep 3: Installing additional Flatpak applications (system-wide)...")
     flatpak_apps_to_install = phase6_config.get("flatpak_apps", {})
     if flatpak_apps_to_install:
@@ -181,16 +187,21 @@ def run_phase6(app_config: dict) -> bool:
             system_wide=True,
             print_fn_info=con.print_info,
             print_fn_error=con.print_error,
-            print_fn_sub_step=con.print_sub_step
+            print_fn_sub_step=con.print_sub_step,
+            logger=app_logger
         ):
             overall_success = False
+            app_logger.error("Phase 6 Flatpak installation encountered issues.")
             con.print_error("Phase 6 Flatpak installation encountered issues.")
     else:
+        app_logger.info("No Flatpak applications listed for Phase 6.")
         con.print_info("No additional Flatpak applications listed for installation in Phase 6.")
     
     if overall_success:
+        app_logger.info("Phase 6: Additional User Packages completed successfully.")
         con.print_success("Phase 6: Additional User Packages completed successfully.")
     else:
-        con.print_error("Phase 6: Additional User Packages completed with errors. Please review the output.")
+        app_logger.error("Phase 6: Additional User Packages completed with errors.")
+        con.print_error("Phase 6: Additional User Packages completed with errors. Please review the output and log file.")
     
     return overall_success
