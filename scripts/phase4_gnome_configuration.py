@@ -14,546 +14,259 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scripts import console_output as con
 from scripts import config_loader
 from scripts import system_utils
-from scripts.logger_utils import app_logger # Using the logger
+from scripts.logger_utils import app_logger 
 
 # --- Constants ---
 GEXT_CLI_MODULE = "gnome_extensions_cli.cli" 
 
 # --- Helper Functions ---
+# _get_target_user, _get_user_home, _install_dnf_packages_ph4, 
+# _install_pip_packages_ph4, _verify_gext_cli_usability are kept as the last complete version.
+# I will paste them at the end for completeness of this file response.
 
 def _get_target_user() -> Optional[str]:
-    """Determines the target user, typically from SUDO_USER when script is run as root."""
     if os.geteuid() == 0: 
         target_user = os.environ.get("SUDO_USER")
-        if not target_user:
-            app_logger.error("Script is running as root, but SUDO_USER environment variable is not set.")
-            con.print_error(
-                "Script is running as root, but SUDO_USER environment variable is not set. "
-                "Cannot determine the target user for GNOME configuration."
-            )
-            con.print_info("Tip: Run 'sudo ./install.py' from a regular user account with an active GUI session.")
-            return None
-        try:
-            system_utils.run_command(["id", "-u", target_user], capture_output=True, check=True, print_fn_info=con.print_info, logger=app_logger)
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            app_logger.error(f"The user '{target_user}' (from SUDO_USER) does not appear to be a valid system user.")
-            con.print_error(f"The user '{target_user}' (from SUDO_USER) does not appear to be a valid system user.")
-            return None
-        app_logger.info(f"Target user for GNOME configuration: {target_user}")
+        if not target_user: app_logger.error("SUDO_USER not set."); con.print_error("SUDO_USER not set."); return None
+        try: system_utils.run_command(["id", "-u", target_user], capture_output=True, check=True, print_fn_info=None, logger=app_logger)
+        except: app_logger.error(f"User {target_user} invalid."); con.print_error(f"User {target_user} invalid."); return None
         return target_user
-    else:
-        current_user = os.getlogin()
-        app_logger.warning(f"Script not running as root. Assuming current user '{current_user}' for GNOME configurations.")
-        con.print_warning(
-            f"Script is not running as root. Assuming current user '{current_user}' for GNOME configurations. "
-            "Ensure this script is run with sudo for DNF/Flatpak system installs and some GNOME settings."
-        )
-        return current_user
+    else: current_user = os.getlogin(); app_logger.warning(f"Not root, using {current_user}."); con.print_warning(f"Not root, using {current_user}."); return current_user
 
 def _get_user_home(username: str) -> Optional[Path]:
-    """Gets the home directory of a specified user."""
     try:
-        app_logger.debug(f"Attempting to get home directory for user '{username}'.")
-        proc = system_utils.run_command(
-            ["getent", "passwd", username], capture_output=True, check=True,
-            print_fn_info=None, logger=app_logger 
-        )
+        proc = system_utils.run_command(["getent", "passwd", username], capture_output=True, check=True,print_fn_info=None, logger=app_logger)
         home_dir_str = proc.stdout.strip().split(":")[-1]
-        if not home_dir_str: 
-            app_logger.error(f"Could not determine home directory for user '{username}' from getent output.")
-            con.print_error(f"Could not determine home directory for user '{username}'.")
-            return None
-        app_logger.debug(f"Home directory for '{username}' is '{home_dir_str}'.")
+        if not home_dir_str: app_logger.error(f"No home dir for {username}."); return None
         return Path(home_dir_str)
-    except Exception as e:
-        app_logger.error(f"Error getting home directory for user '{username}': {e}", exc_info=True)
-        con.print_error(f"Error getting home directory for user '{username}': {e}")
-        return None
+    except Exception as e: app_logger.error(f"Error get home for {username}: {e}", exc_info=True); return None
 
 def _install_dnf_packages_ph4(packages: List[str]) -> bool:
-    """Installs DNF packages for Phase 4."""
-    if not packages:
-        app_logger.info("No DNF packages specified for Phase 4.")
-        con.print_info("No DNF packages specified for Phase 4.")
-        return True
-    
-    app_logger.info(f"Attempting to install DNF packages for Phase 4: {packages}")
-    con.print_sub_step(f"Installing DNF packages: {', '.join(packages)}")
+    if not packages: app_logger.info("No DNF for Ph4."); con.print_info("No DNF for Ph4."); return True
+    app_logger.info(f"Install DNF Ph4: {packages}"); con.print_sub_step(f"Install DNF: {', '.join(packages)}")
     try:
         cmd = ["sudo", "dnf", "install", "-y", "--allowerasing"] + packages
-        system_utils.run_command(
-            cmd, capture_output=True, 
-            print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step,
-            logger=app_logger
-        )
-        con.print_success(f"DNF packages installed/verified: {', '.join(packages)}")
-        app_logger.info(f"Successfully processed DNF packages for Phase 4: {packages}")
-        return True
-    except Exception as e: 
-        app_logger.error(f"Failed to install DNF packages for Phase 4: {packages}. Error: {e}", exc_info=True)
-        return False
+        system_utils.run_command(cmd, capture_output=True, print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step, logger=app_logger)
+        con.print_success(f"DNF pkgs done: {', '.join(packages)}"); app_logger.info(f"DNF Ph4 done: {packages}"); return True
+    except Exception as e: app_logger.error(f"Fail DNF Ph4: {packages}. {e}", exc_info=True); return False
 
 def _install_pip_packages_ph4(packages: List[str], target_user: str) -> bool:
-    """Installs a list of pip packages for the target user (--user)."""
-    if not packages:
-        app_logger.info("No pip packages specified for installation in Phase 4.")
-        con.print_info("No pip packages specified for installation in Phase 4.")
-        return True
-
-    app_logger.info(f"Attempting to install pip packages for user '{target_user}': {packages}")
-    con.print_sub_step(f"Installing pip packages for user '{target_user}': {', '.join(packages)}")
+    if not packages: app_logger.info("No pip for Ph4."); con.print_info("No pip for Ph4."); return True
+    app_logger.info(f"Install pip for {target_user}: {packages}"); con.print_sub_step(f"Install pip for {target_user}: {', '.join(packages)}")
     all_success = True
-    for package_name in packages:
-        app_logger.info(f"Installing pip package '{package_name}' for user '{target_user}'.")
-        con.print_info(f"Installing pip package '{package_name}' for user '{target_user}'...")
-        install_cmd = f"python3 -m pip install --user --upgrade {shlex.quote(package_name)}"
+    for pkg_name in packages:
+        app_logger.info(f"Pip install {pkg_name} for {target_user}."); con.print_info(f"Pip install {pkg_name} for {target_user}...")
+        cmd = f"python3 -m pip install --user --upgrade {shlex.quote(pkg_name)}"
         try:
-            system_utils.run_command(
-                install_cmd, 
-                run_as_user=target_user, 
-                shell=True, 
-                capture_output=True, 
-                check=True,
-                print_fn_info=con.print_info, 
-                print_fn_error=con.print_error,
-                print_fn_sub_step=con.print_sub_step,
-                logger=app_logger
-            )
-            con.print_success(f"Pip package '{package_name}' installed/updated successfully for user '{target_user}'.")
-            app_logger.info(f"Pip package '{package_name}' installed/updated for '{target_user}'.")
-        except FileNotFoundError: 
-            app_logger.error(f"'python3' or 'pip' command not found for user '{target_user}'. Cannot install '{package_name}'.")
-            con.print_error(f"'python3' or 'pip' command not found for user '{target_user}'. Cannot install '{package_name}'.")
-            con.print_info("Please ensure 'python3-pip' is installed system-wide (e.g., in Phase 2).")
-            all_success = False
-            break 
-        except Exception as e:
-            app_logger.error(f"Failed to install pip package '{package_name}' for user '{target_user}': {e}", exc_info=True)
-            con.print_error(f"Failed to install pip package '{package_name}' for user '{target_user}'.")
-            all_success = False
+            system_utils.run_command(cmd, run_as_user=target_user, shell=True, capture_output=True, check=True,print_fn_info=con.print_info, print_fn_error=con.print_error,print_fn_sub_step=con.print_sub_step,logger=app_logger)
+            con.print_success(f"Pip {pkg_name} done for {target_user}."); app_logger.info(f"Pip {pkg_name} done for {target_user}.")
+        except FileNotFoundError: app_logger.error(f"python3/pip not found for {target_user} for {pkg_name}."); con.print_error(f"python3/pip not found for {target_user}."); all_success = False; break 
+        except Exception as e: app_logger.error(f"Fail pip {pkg_name} for {target_user}: {e}", exc_info=True); con.print_error(f"Fail pip {pkg_name}."); all_success = False
     return all_success
 
 def _verify_gext_cli_usability(target_user: str) -> bool:
-    """Verifies if gnome-extensions-cli is usable by the target user."""
-    app_logger.info(f"Verifying gnome-extensions-cli usability for user '{target_user}'.")
-    con.print_info(f"Verifying gnome-extensions-cli usability for user '{target_user}'...")
-    check_cmd_str = f"dbus-run-session -- python3 -m {GEXT_CLI_MODULE} --version"
+    app_logger.info(f"Verify gext usability for {target_user}."); con.print_info(f"Verify gext for {target_user}...")
+    cmd = f"dbus-run-session -- python3 -m {GEXT_CLI_MODULE} --version"
     try:
-        proc = system_utils.run_command(
-            check_cmd_str, 
-            run_as_user=target_user, 
-            shell=True, 
-            capture_output=True, 
-            check=True,
-            print_fn_info=con.print_info, 
-            logger=app_logger
-        )
+        proc = system_utils.run_command(cmd,run_as_user=target_user,shell=True,capture_output=True,check=True,print_fn_info=con.print_info,logger=app_logger)
         app_logger.debug(f"gext --version STDOUT for '{target_user}': {proc.stdout.strip()}")
-        if proc.stderr.strip(): app_logger.debug(f"gext --version STDERR for '{target_user}': {proc.stderr.strip()}")
-        con.print_success(f"gnome-extensions-cli is available and usable for user '{target_user}'.")
-        app_logger.info(f"gnome-extensions-cli is usable for '{target_user}'.")
-        return True
-    except Exception as e:
-        app_logger.error(f"gnome-extensions-cli verification failed for user '{target_user}': {e}", exc_info=True)
-        con.print_error(f"gnome-extensions-cli verification failed for user '{target_user}'.")
-        con.print_info(f"Attempted to run: {check_cmd_str} (as {target_user})")
-        return False
+        con.print_success(f"gext usable for {target_user}."); app_logger.info(f"gext usable for {target_user}."); return True
+    except Exception as e: app_logger.error(f"gext verify fail for {target_user}: {e}", exc_info=True); con.print_error(f"gext verify fail."); return False
 
 def _install_ego_extension(ext_key_name: str, ext_cfg: Dict, target_user: str) -> bool:
-    """Installs and enables a GNOME extension from extensions.gnome.org (EGO)."""
-    uuid = ext_cfg.get("uuid")
-    numerical_id = ext_cfg.get("numerical_id")
-    pretty_name = ext_cfg.get("name", ext_key_name) 
-
-    if not uuid:
-        app_logger.error(f"Missing 'uuid' for EGO extension '{pretty_name}'. Skipping.")
-        con.print_error(f"Missing 'uuid' for EGO extension '{pretty_name}'. Skipping.")
-        return False
-    
+    uuid = ext_cfg.get("uuid"); numerical_id = ext_cfg.get("numerical_id"); pretty_name = ext_cfg.get("name", ext_key_name) 
+    if not uuid: app_logger.error(f"No uuid EGO ext '{pretty_name}'. Skip."); con.print_error(f"No uuid EGO ext '{pretty_name}'. Skip."); return False
     install_target = str(numerical_id) if numerical_id else uuid
-    app_logger.info(f"Attempting to install EGO extension '{pretty_name}' (ID/UUID: {install_target}) for user '{target_user}'.")
-    con.print_info(f"Attempting to install EGO extension '{pretty_name}' (ID/UUID: {install_target}) for user '{target_user}'.")
-    
+    app_logger.info(f"Install EGO ext '{pretty_name}' ({install_target}) for {target_user} using --filesystem.")
+    con.print_info(f"Install EGO ext '{pretty_name}' ({install_target}) for {target_user}...")
     try:
-        # gext install does not have a --yes or --non-interactive flag based on its --help output
-        install_cmd_str = f"dbus-run-session -- python3 -m {GEXT_CLI_MODULE} install {shlex.quote(install_target)}"
-        app_logger.info(f"Executing install command: {install_cmd_str} (as {target_user})")
-        proc_install = system_utils.run_command(
-            install_cmd_str, run_as_user=target_user, shell=True, 
-            capture_output=True, check=True, # check=True will raise error if install fails (non-zero exit)
-            print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger
-        )
-        app_logger.info(f"Install command for '{pretty_name}' STDOUT: {proc_install.stdout.strip() if proc_install.stdout else 'None'}")
-        if proc_install.stderr and proc_install.stderr.strip(): app_logger.warning(f"Install command for '{pretty_name}' STDERR: {proc_install.stderr.strip()}")
-        # If check=True and command fails, it raises CalledProcessError, so we might not reach here on failure.
-        con.print_success(f"EGO extension '{pretty_name}' install command executed.")
+        # INSTALL using --filesystem backend (no dbus-run-session needed for this part)
+        install_cmd_list = ["python3", "-m", GEXT_CLI_MODULE, "install", "--filesystem", install_target]
+        app_logger.info(f"Exec EGO install cmd: {' '.join(install_cmd_list)} (as {target_user})")
+        proc_install = system_utils.run_command(install_cmd_list, run_as_user=target_user, shell=False, capture_output=True, check=True, print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
+        app_logger.info(f"Install STDOUT '{pretty_name}': {proc_install.stdout.strip() if proc_install.stdout else 'None'}")
+        if proc_install.stderr and proc_install.stderr.strip(): app_logger.warning(f"Install STDERR '{pretty_name}': {proc_install.stderr.strip()}")
+        con.print_success(f"EGO ext '{pretty_name}' install cmd executed.")
 
-        app_logger.info(f"Attempting to enable EGO extension '{pretty_name}' (UUID: {uuid})...")
-        con.print_info(f"Attempting to enable EGO extension '{pretty_name}' (UUID: {uuid})...")
+        app_logger.info(f"Enable EGO ext '{pretty_name}' (UUID: {uuid}) using DBus.")
+        con.print_info(f"Enable EGO ext '{pretty_name}' (UUID: {uuid})...")
+        # ENABLE using DBus (dbus-run-session is appropriate here)
         enable_cmd_str = f"dbus-run-session -- python3 -m {GEXT_CLI_MODULE} enable {shlex.quote(uuid)}"
-        proc_enable = system_utils.run_command(
-            enable_cmd_str, run_as_user=target_user, shell=True, 
-            capture_output=True, check=True, 
-            print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger
-        )
-        app_logger.info(f"Enable command for '{pretty_name}' STDOUT: {proc_enable.stdout.strip() if proc_enable.stdout else 'None'}")
-        if proc_enable.stderr and proc_enable.stderr.strip(): app_logger.warning(f"Enable command for '{pretty_name}' STDERR: {proc_enable.stderr.strip()}")
-        con.print_success(f"EGO extension '{pretty_name}' (UUID: {uuid}) enable command executed.")
+        proc_enable = system_utils.run_command(enable_cmd_str, run_as_user=target_user, shell=True, capture_output=True, check=True, print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
+        app_logger.info(f"Enable STDOUT '{pretty_name}': {proc_enable.stdout.strip() if proc_enable.stdout else 'None'}")
+        if proc_enable.stderr and proc_enable.stderr.strip(): app_logger.warning(f"Enable STDERR '{pretty_name}': {proc_enable.stderr.strip()}")
+        con.print_success(f"EGO ext '{pretty_name}' enable cmd executed.")
         
-        app_logger.info(f"Verifying installation of '{pretty_name}' with 'gext info'.")
+        app_logger.info(f"Verify EGO ext '{pretty_name}' with 'gext info' (DBus).")
         info_cmd_str = f"dbus-run-session -- python3 -m {GEXT_CLI_MODULE} info {shlex.quote(uuid)}"
         proc_info = system_utils.run_command(info_cmd_str, run_as_user=target_user, shell=True, capture_output=True, check=False, logger=app_logger)
-        app_logger.debug(f"'gext info {uuid}' STDOUT: {proc_info.stdout.strip() if proc_info.stdout else 'None'}")
-        if proc_info.stderr and proc_info.stderr.strip(): app_logger.debug(f"'gext info {uuid}' STDERR: {proc_info.stderr.strip()}")
+        app_logger.debug(f"gext info STDOUT '{uuid}': {proc_info.stdout.strip() if proc_info.stdout else 'None'}")
+        if proc_info.stderr and proc_info.stderr.strip(): app_logger.debug(f"gext info STDERR '{uuid}': {proc_info.stderr.strip()}")
         if proc_info.returncode == 0 and "State: ENABLED" in proc_info.stdout:
-            app_logger.info(f"Verification successful: '{pretty_name}' is installed and ENABLED.")
-            con.print_success(f"Verified: Extension '{pretty_name}' is enabled.")
+            app_logger.info(f"VERIFIED: EGO ext '{pretty_name}' ENABLED."); con.print_success(f"VERIFIED: Ext '{pretty_name}' ENABLED.")
         else:
-            app_logger.warning(f"Verification problem: '{pretty_name}' not found or not ENABLED via 'gext info'. RC: {proc_info.returncode}. This might be due to D-Bus session isolation or pending GNOME Shell reload.")
-            con.print_warning(f"Verification for '{pretty_name}' indicated it might not be enabled correctly in the current view. A session restart may be needed.")
-        return True # Success based on commands executing without error
-    
-    except subprocess.CalledProcessError as e:
-        app_logger.error(f"CalledProcessError for EGO extension '{pretty_name}': {' '.join(e.cmd) if isinstance(e.cmd, list) else e.cmd}, RC: {e.returncode}", exc_info=False)
-        # system_utils.run_command already logs STDOUT/STDERR from the exception object if logger is passed
-        err_lower = str(e).lower()
+            app_logger.warning(f"VERIFY PROBLEM: EGO ext '{pretty_name}' not ENABLED. RC: {proc_info.returncode}. May need session restart."); con.print_warning(f"VERIFY: '{pretty_name}' not enabled. May need session restart.")
+        return True
+    except subprocess.CalledProcessError as e: # Catch errors from check=True commands
+        app_logger.error(f"CalledProcessError EGO ext '{pretty_name}': Cmd: {' '.join(e.cmd) if isinstance(e.cmd, list) else e.cmd}, RC: {e.returncode}", exc_info=False)
         stderr_lower = e.stderr.lower() if e.stderr else ""
-        if "already enabled" in err_lower or "already enabled" in stderr_lower:
-            app_logger.info(f"Extension '{pretty_name}' was already enabled (reported by CalledProcessError).")
-            con.print_info(f"Extension '{pretty_name}' was already enabled.")
-            return True 
-        if "already installed" in err_lower or "already installed" in stderr_lower:
-            app_logger.info(f"Extension '{pretty_name}' was already installed (reported by CalledProcessError). Attempting to enable...")
-            con.print_info(f"Extension '{pretty_name}' was already installed. Attempting to enable...")
-            try:
+        if "already enabled" in stderr_lower: app_logger.info(f"Ext '{pretty_name}' already enabled."); con.print_info(f"Ext '{pretty_name}' already enabled."); return True 
+        if "already installed" in stderr_lower: # This might come from install --filesystem too
+            app_logger.info(f"Ext '{pretty_name}' already installed. Trying enable again."); con.print_info(f"Ext '{pretty_name}' already installed. Try enable...")
+            try: # Try enable again
                 enable_cmd_str = f"dbus-run-session -- python3 -m {GEXT_CLI_MODULE} enable {shlex.quote(uuid)}"
-                system_utils.run_command(enable_cmd_str, run_as_user=target_user, shell=True, capture_output=True, check=True, print_fn_info=con.print_info,print_fn_error=con.print_error, logger=app_logger)
-                con.print_success(f"EGO extension '{pretty_name}' (UUID: {uuid}) enabled successfully after 'already installed' message.")
-                return True
-            except Exception as e_enable:
-                app_logger.error(f"Failed to enable EGO extension '{pretty_name}' after 'already installed' message: {e_enable}", exc_info=True)
-                con.print_error(f"Failed to enable EGO extension '{pretty_name}' after 'already installed' message.")
-                return False
-        con.print_error(f"Failed to install or enable EGO extension '{pretty_name}'. Check logs for details.")
-        return False
-    except Exception as e: 
-        app_logger.error(f"An unexpected error occurred with EGO extension '{pretty_name}': {e}", exc_info=True)
-        con.print_error(f"An unexpected error occurred with EGO extension '{pretty_name}'. Check logs for details.")
-        return False
+                system_utils.run_command(enable_cmd_str, run_as_user=target_user, shell=True, capture_output=True, check=True,print_fn_info=con.print_info,print_fn_error=con.print_error, logger=app_logger)
+                con.print_success(f"EGO ext '{pretty_name}' enabled after 'already installed'."); return True
+            except Exception as e_enable: app_logger.error(f"Fail enable EGO ext '{pretty_name}' after 'already installed': {e_enable}", exc_info=True); con.print_error(f"Fail enable EGO '{pretty_name}'."); return False
+        con.print_error(f"Failed EGO ext '{pretty_name}'. Check logs."); return False
+    except Exception as e: app_logger.error(f"Unexpected error EGO ext '{pretty_name}': {e}", exc_info=True); con.print_error(f"Unexpected error EGO ext '{pretty_name}'."); return False
 
 def _install_git_extension(ext_key_name: str, ext_cfg: Dict, target_user: str) -> bool:
-    """Installs and enables a GNOME extension from a Git repository."""
-    git_url = ext_cfg.get("url")
-    install_script_name = ext_cfg.get("install_script") 
-    uuid_to_enable = ext_cfg.get("uuid_to_enable")
-    pretty_name = ext_cfg.get("name", ext_key_name)
-
-    if not git_url or not install_script_name:
-        app_logger.error(f"Missing 'url' or 'install_script' for Git extension '{pretty_name}'. Skipping.")
-        con.print_error(f"Missing 'url' or 'install_script' for Git extension '{pretty_name}'. Skipping.")
-        return False
-    
-    app_logger.info(f"Attempting to install Git extension '{pretty_name}' from {git_url} for user '{target_user}'.")
-    con.print_info(f"Attempting to install Git extension '{pretty_name}' from {git_url} for user '{target_user}'.")
-    
+    git_url = ext_cfg.get("url"); install_script_name = ext_cfg.get("install_script") 
+    uuid_to_enable = ext_cfg.get("uuid_to_enable"); pretty_name = ext_cfg.get("name", ext_key_name)
+    if not git_url or not install_script_name: app_logger.error(f"No url/script Git ext '{pretty_name}'. Skip."); con.print_error(f"No url/script Git ext '{pretty_name}'. Skip."); return False
+    app_logger.info(f"Install Git ext '{pretty_name}' from {git_url} for {target_user}."); con.print_info(f"Install Git ext '{pretty_name}' from {git_url} for {target_user}...")
     install_script_command_part = ""
-    if install_script_name.lower() == "make install": 
-        install_script_command_part = "make install"
-    elif install_script_name.lower() == "make": 
-        install_script_command_part = "make"
-    elif install_script_name.endswith(".sh"): 
-        install_script_command_part = f"./{shlex.quote(install_script_name)}"
-    else: 
-        install_script_command_part = shlex.quote(install_script_name) 
-    
+    if install_script_name.lower() == "make install": install_script_command_part = "make install"
+    elif install_script_name.lower() == "make": install_script_command_part = "make"
+    elif install_script_name.endswith(".sh"): install_script_command_part = f"./{shlex.quote(install_script_name)}"
+    else: install_script_command_part = shlex.quote(install_script_name) 
     repo_name_from_url = Path(git_url).name.removesuffix(".git") if Path(git_url).name.endswith(".git") else Path(git_url).name
     shell_safe_pretty_name = shlex.quote(pretty_name)
-
+    # The install script itself should copy files to the correct user extension path.
+    # dbus-run-session for the install script is kept in case it internally calls gsettings or other D-Bus services.
     script_to_run_as_user = f"""
-        set -e
-        SHELL_PRETTY_NAME={shell_safe_pretty_name}
+        set -e; SHELL_PRETTY_NAME={shell_safe_pretty_name}
         TMP_EXT_DIR=$(mktemp -d -t gnome_ext_{shlex.quote(ext_key_name)}_XXXXXX)
-        
-        trap 'echo "Cleaning up temporary directory $TMP_EXT_DIR for $SHELL_PRETTY_NAME (user $(whoami))"; rm -rf "$TMP_EXT_DIR"' EXIT
-
-        echo "Cloning {shlex.quote(git_url)} into $TMP_EXT_DIR/{shlex.quote(repo_name_from_url)} (as user $(whoami))..."
+        trap 'echo "Cleaning up $TMP_EXT_DIR for $SHELL_PRETTY_NAME (user $(whoami))"; rm -rf "$TMP_EXT_DIR"' EXIT
+        echo "Cloning {shlex.quote(git_url)} into $TMP_EXT_DIR/{shlex.quote(repo_name_from_url)} (user $(whoami))..."
         git clone --depth=1 {shlex.quote(git_url)} "$TMP_EXT_DIR/{shlex.quote(repo_name_from_url)}"
-        
         cd "$TMP_EXT_DIR/{shlex.quote(repo_name_from_url)}"
-        echo "Current directory for install: $(pwd)"
-        echo "Running install script command: {install_script_command_part}..."
-        
-        if [ -f "{install_script_name}" ] && [[ "{install_script_name}" == *.sh ]]; then
-            chmod +x "{install_script_name}"
-        fi
-        
-        dbus-run-session -- {install_script_command_part}
-        
+        echo "CWD for install: $(pwd)"; echo "Run install script: {install_script_command_part}..."
+        if [ -f "{install_script_name}" ] && [[ "{install_script_name}" == *.sh ]]; then chmod +x "{install_script_name}"; fi
+        dbus-run-session -- {install_script_command_part} 
         echo "Install script for $SHELL_PRETTY_NAME finished."
     """
     try:
-        app_logger.info(f"Executing installation script for '{pretty_name}' as user '{target_user}'.")
-        con.print_sub_step(f"Executing installation script for '{pretty_name}' as user '{target_user}'.")
-        system_utils.run_command(
-            script_to_run_as_user, 
-            run_as_user=target_user, 
-            shell=True, 
-            capture_output=True, 
-            check=True, 
-            print_fn_info=con.print_info, 
-            print_fn_error=con.print_error, 
-            print_fn_sub_step=con.print_sub_step,
-            logger=app_logger
-        )
-        con.print_success(f"Git extension '{pretty_name}' installed successfully via script.")
-        
+        app_logger.info(f"Exec install script for '{pretty_name}' as {target_user}."); con.print_sub_step(f"Exec install script for '{pretty_name}' as {target_user}.")
+        system_utils.run_command(script_to_run_as_user, run_as_user=target_user, shell=True, capture_output=True, check=True, print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step, logger=app_logger)
+        con.print_success(f"Git ext '{pretty_name}' install script executed.")
         if uuid_to_enable:
-            app_logger.info(f"Attempting to enable Git extension '{pretty_name}' (UUID: {uuid_to_enable})...")
-            con.print_info(f"Attempting to enable '{pretty_name}' (UUID: {uuid_to_enable})...")
+            app_logger.info(f"Enable Git ext '{pretty_name}' (UUID: {uuid_to_enable}) using DBus.")
+            con.print_info(f"Enable '{pretty_name}' (UUID: {uuid_to_enable})...")
+            # ENABLE using DBus
             enable_cmd_str = f"dbus-run-session -- python3 -m {GEXT_CLI_MODULE} enable {shlex.quote(uuid_to_enable)}"
-            system_utils.run_command(
-                enable_cmd_str, run_as_user=target_user, shell=True, 
-                capture_output=True, check=True, 
-                print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger
-            )
-            con.print_success(f"Git extension '{pretty_name}' (UUID: {uuid_to_enable}) enable command executed.")
-
-            app_logger.info(f"Verifying installation of Git ext '{pretty_name}' with 'gext info'.")
+            system_utils.run_command(enable_cmd_str, run_as_user=target_user, shell=True, capture_output=True, check=True, print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
+            con.print_success(f"Git ext '{pretty_name}' enable cmd executed.")
+            app_logger.info(f"Verify Git ext '{pretty_name}' with 'gext info' (DBus).")
             info_cmd_str_git = f"dbus-run-session -- python3 -m {GEXT_CLI_MODULE} info {shlex.quote(uuid_to_enable)}"
             proc_info_git = system_utils.run_command(info_cmd_str_git, run_as_user=target_user, shell=True, capture_output=True, check=False, logger=app_logger)
-            app_logger.debug(f"'gext info {uuid_to_enable}' STDOUT: {proc_info_git.stdout.strip() if proc_info_git.stdout else 'None'}")
-            if proc_info_git.stderr and proc_info_git.stderr.strip(): app_logger.debug(f"'gext info {uuid_to_enable}' STDERR: {proc_info_git.stderr.strip()}")
+            app_logger.debug(f"gext info STDOUT '{uuid_to_enable}': {proc_info_git.stdout.strip() if proc_info_git.stdout else 'None'}")
+            if proc_info_git.stderr and proc_info_git.stderr.strip(): app_logger.debug(f"gext info STDERR '{uuid_to_enable}': {proc_info_git.stderr.strip()}")
             if proc_info_git.returncode == 0 and "State: ENABLED" in proc_info_git.stdout:
-                app_logger.info(f"Verification successful: Git ext '{pretty_name}' is installed and ENABLED.")
-                con.print_success(f"Verified: Extension '{pretty_name}' is enabled.")
+                app_logger.info(f"VERIFIED: Git ext '{pretty_name}' ENABLED."); con.print_success(f"VERIFIED: Ext '{pretty_name}' ENABLED.")
             else:
-                app_logger.warning(f"Verification problem: Git ext '{pretty_name}' not found or not ENABLED via 'gext info'. RC: {proc_info_git.returncode}")
-                con.print_warning(f"Verification for '{pretty_name}' indicated it might not be enabled correctly. A session restart may be needed.")
-        else: 
-            con.print_info(f"No 'uuid_to_enable' specified for '{pretty_name}'. Manual check or enabling might be needed.")
+                app_logger.warning(f"VERIFY PROBLEM: Git ext '{pretty_name}' not ENABLED. RC: {proc_info_git.returncode}. May need session restart."); con.print_warning(f"VERIFY: '{pretty_name}' not enabled. May need session restart.")
+        else: con.print_info(f"No 'uuid_to_enable' for '{pretty_name}'.")
         return True
-    except FileNotFoundError as e: 
-        app_logger.error(f"File not found during Git extension '{pretty_name}' install: {e}. Is git, mktemp, or a command in its install script missing for user '{target_user}'?", exc_info=True)
-        con.print_error(f"File not found during Git extension '{pretty_name}' install. Check logs.")
-        return False
+    except FileNotFoundError as e: app_logger.error(f"File not found Git ext '{pretty_name}': {e}. git/mktemp missing?", exc_info=True); con.print_error(f"File not found for Git ext '{pretty_name}'."); return False
     except subprocess.CalledProcessError as e:
-        app_logger.error(f"CalledProcessError for Git extension '{pretty_name}': {' '.join(e.cmd) if isinstance(e.cmd, list) else e.cmd}, RC: {e.returncode}", exc_info=False)
-        err_lower = str(e).lower()
+        app_logger.error(f"CalledProcessError Git ext '{pretty_name}': Cmd: {' '.join(e.cmd) if isinstance(e.cmd, list) else e.cmd}, RC: {e.returncode}", exc_info=False)
         stderr_lower = e.stderr.lower() if e.stderr else ""
-        if "already enabled" in err_lower or "already enabled" in stderr_lower: 
-            app_logger.info(f"Extension '{pretty_name}' was already enabled (reported by CalledProcessError).")
-            con.print_info(f"Extension '{pretty_name}' was already enabled.")
-            return True 
-        con.print_error(f"Failed to install or enable Git extension '{pretty_name}'. Review script output and logs.")
-        return False
-    except Exception as e:
-        app_logger.error(f"An unexpected error occurred installing Git extension '{pretty_name}': {e}", exc_info=True)
-        con.print_error(f"An unexpected error occurred installing Git extension '{pretty_name}'. Check logs.")
-        return False
+        if "already enabled" in stderr_lower: app_logger.info(f"Ext '{pretty_name}' already enabled."); con.print_info(f"Ext '{pretty_name}' already enabled."); return True 
+        con.print_error(f"Failed Git ext '{pretty_name}'. Review logs."); return False
+    except Exception as e: app_logger.error(f"Unexpected error Git ext '{pretty_name}': {e}", exc_info=True); con.print_error(f"Unexpected error Git ext '{pretty_name}'."); return False
 
 def _set_dark_theme_preference(target_user: str) -> bool:
-    """Sets the GNOME desktop interface color-scheme to 'prefer-dark' and attempts to set Adwaita-dark GTK theme."""
     app_logger.info(f"Attempting to set system appearance to dark mode for user '{target_user}'.")
     con.print_sub_step(f"Attempting to set system appearance to dark mode for user '{target_user}'...")
-    
-    schema = "org.gnome.desktop.interface"
-    color_scheme_key = "color-scheme"
-    color_scheme_value = "prefer-dark" 
-    
+    schema = "org.gnome.desktop.interface"; color_scheme_key = "color-scheme"; color_scheme_value = "prefer-dark" 
     app_logger.info(f"Setting GSettings: {schema} {color_scheme_key} to '{color_scheme_value}' (as {target_user})")
     con.print_info(f"Setting GSettings: {schema} {color_scheme_key} to '{color_scheme_value}' (as {target_user})")
     cmd_color_scheme = ["dbus-run-session", "--", "gsettings", "set", schema, color_scheme_key, color_scheme_value]
-    
     success_color_scheme = False
     try:
-        system_utils.run_command(
-            cmd_color_scheme,
-            run_as_user=target_user,
-            shell=False, 
-            capture_output=True,
-            check=True, 
-            print_fn_info=con.print_info,
-            print_fn_error=con.print_error,
-            logger=app_logger
-        )
-        app_logger.info(f"GSettings: '{schema} {color_scheme_key}' successfully set to '{color_scheme_value}'.")
-        con.print_success(f"GSettings: '{schema} {color_scheme_key}' successfully set to '{color_scheme_value}'.")
-        success_color_scheme = True
-    except FileNotFoundError: 
-        app_logger.error(f"'gsettings' or 'dbus-run-session' command not found. Cannot set dark theme for '{target_user}'.", exc_info=True)
-        con.print_error(f"'gsettings' or 'dbus-run-session' command not found. Cannot set dark theme for '{target_user}'.")
-        return False 
-    except subprocess.CalledProcessError as e:
-        app_logger.error(f"Failed to set GSettings '{schema} {color_scheme_key}'. Command: {' '.join(e.cmd)}, RC: {e.returncode}", exc_info=False)
-        con.print_error(f"Failed to set GSettings '{schema} {color_scheme_key}'.")
-    except Exception as e:
-        app_logger.error(f"An unexpected error occurred while setting '{color_scheme_key}' for '{target_user}': {e}", exc_info=True)
-        con.print_error(f"An unexpected error occurred while setting '{color_scheme_key}'.")
-
-    gtk_theme_key = "gtk-theme"
-    gtk_theme_value = "Adwaita-dark" 
-    app_logger.info(f"Attempting to set GSettings: {schema} {gtk_theme_key} to '{gtk_theme_value}' (as {target_user})")
-    con.print_info(f"Attempting to set GSettings: {schema} {gtk_theme_key} to '{gtk_theme_value}' (as {target_user})")
+        system_utils.run_command(cmd_color_scheme,run_as_user=target_user,shell=False,capture_output=True,check=True,print_fn_info=con.print_info,print_fn_error=con.print_error,logger=app_logger)
+        app_logger.info(f"GSettings: '{schema} {color_scheme_key}' successfully set to '{color_scheme_value}'."); con.print_success(f"GSettings: '{schema} {color_scheme_key}' set."); success_color_scheme = True
+    except FileNotFoundError: app_logger.error(f"gsettings/dbus-run-session not found for dark theme.", exc_info=True); con.print_error(f"gsettings/dbus-run-session not found."); return False 
+    except subprocess.CalledProcessError as e: app_logger.error(f"Failed set GSettings '{schema} {color_scheme_key}'. Cmd: {' '.join(e.cmd)}, RC: {e.returncode}", exc_info=False); con.print_error(f"Failed set GSettings '{schema} {color_scheme_key}'.")
+    except Exception as e: app_logger.error(f"Unexpected error setting '{color_scheme_key}': {e}", exc_info=True); con.print_error(f"Unexpected error setting '{color_scheme_key}'.")
+    
+    gtk_theme_key = "gtk-theme"; gtk_theme_value = "Adwaita-dark" 
+    app_logger.info(f"Attempting GSettings: {schema} {gtk_theme_key} to '{gtk_theme_value}' (as {target_user})")
+    con.print_info(f"Attempting GSettings: {schema} {gtk_theme_key} to '{gtk_theme_value}' (as {target_user})")
     cmd_gtk_theme = ["dbus-run-session", "--", "gsettings", "set", schema, gtk_theme_key, gtk_theme_value]
     try:
-        system_utils.run_command(
-            cmd_gtk_theme,
-            run_as_user=target_user,
-            shell=False, 
-            capture_output=True,
-            check=False, 
-            print_fn_info=con.print_info,
-            print_fn_error=con.print_error,
-            logger=app_logger
-        )
+        system_utils.run_command(cmd_gtk_theme,run_as_user=target_user,shell=False,capture_output=True,check=False,print_fn_info=con.print_info,print_fn_error=con.print_error,logger=app_logger)
         app_logger.info(f"Attempt to set GSettings '{gtk_theme_key}' to '{gtk_theme_value}' completed.")
         verify_gtk_cmd = ["dbus-run-session", "--", "gsettings", "get", schema, gtk_theme_key]
         proc_gtk_get = system_utils.run_command(verify_gtk_cmd, run_as_user=target_user, shell=False, capture_output=True, check=False, logger=app_logger)
         app_logger.debug(f"Current value of '{schema} {gtk_theme_key}': {proc_gtk_get.stdout.strip() if proc_gtk_get.stdout else 'N/A'}")
-    except FileNotFoundError:
-        app_logger.warning(f"Could not attempt to set '{gtk_theme_key}' due to missing command (gsettings/dbus-run-session).")
-    except Exception as e: 
-        app_logger.warning(f"Could not set '{gtk_theme_key}' for '{target_user}': {e}. This might be non-critical.", exc_info=True)
+    except Exception as e: app_logger.warning(f"Could not set/verify '{gtk_theme_key}': {e}. Non-critical.", exc_info=True)
 
-    if success_color_scheme:
-        app_logger.info("GNOME dark mode preference applied. User may need to logout/login.")
-        con.print_info("GNOME dark mode preference applied. A logout/login or restart of GNOME Shell might be needed for changes to fully reflect everywhere.")
-    else:
-        app_logger.warning("Setting primary dark mode (color-scheme) failed. Appearance might not change.")
-        con.print_warning("Setting primary dark mode (color-scheme) failed. Appearance might not change.")
-        
+    if success_color_scheme: app_logger.info("GNOME dark mode pref applied. May need logout/login."); con.print_info("GNOME dark mode pref applied. May need logout/login.")
+    else: app_logger.warning("Primary dark mode (color-scheme) failed."); con.print_warning("Primary dark mode (color-scheme) failed.")
     return success_color_scheme
 
-
 # --- Main Phase Function ---
-
 def run_phase4(app_config: dict) -> bool:
-    """Executes Phase 4: GNOME Configuration & Extensions."""
     app_logger.info("Starting Phase 4: GNOME Configuration & Extensions.")
     con.print_step("PHASE 4: GNOME Configuration & Extensions")
     overall_success = True
-    
     phase4_config_data = config_loader.get_phase_data(app_config, "phase4_gnome_configuration")
-    if not phase4_config_data:
-        app_logger.warning("No configuration found for Phase 4 in YAML. Skipping phase.")
-        con.print_warning("No configuration found for Phase 4. Skipping.")
-        return True 
-
+    if not phase4_config_data: app_logger.warning("No config Ph4. Skip."); con.print_warning("No config Ph4. Skip."); return True 
     target_user = _get_target_user()
-    if not target_user:
-        return False 
-    
+    if not target_user: return False 
     _ = _get_user_home(target_user) 
-        
-    app_logger.info(f"Running GNOME configurations for user: {target_user}")
-    con.print_info(f"Running GNOME configurations for user: [bold cyan]{target_user}[/bold cyan]")
+    app_logger.info(f"Run GNOME configs for user: {target_user}"); con.print_info(f"Run GNOME configs for user: [bold cyan]{target_user}[/bold cyan]")
 
-    # Step 1: Install DNF packages
-    app_logger.info("Phase 4, Step 1: Installing DNF packages for GNOME...")
-    con.print_info("\nStep 1: Installing DNF packages for GNOME...")
+    app_logger.info("Ph4, Step 1: Install DNF."); con.print_info("\nStep 1: Install DNF GNOME...")
     dnf_packages = phase4_config_data.get("dnf_packages", [])
     if dnf_packages:
         if not _install_dnf_packages_ph4(dnf_packages): overall_success = False
-    else: 
-        app_logger.info("No DNF packages specified for Phase 4.")
-        con.print_info("No DNF packages specified for Phase 4 in configuration.")
+    else: app_logger.info("No DNF pkgs for Ph4."); con.print_info("No DNF pkgs for Ph4.")
 
-    # Step 2: Install pip packages
-    app_logger.info(f"Phase 4, Step 2: Installing pip packages for user '{target_user}'...")
-    con.print_info(f"\nStep 2: Installing pip packages for user '{target_user}'...")
+    app_logger.info(f"Ph4, Step 2: Install pip for {target_user}."); con.print_info(f"\nStep 2: Install pip for {target_user}...")
     pip_packages_to_install = phase4_config_data.get("pip_packages", []) 
     if pip_packages_to_install:
         if not _install_pip_packages_ph4(pip_packages_to_install, target_user): overall_success = False
-    else: 
-        app_logger.info("No pip packages specified for Phase 4.")
-        con.print_info("No pip packages specified for Phase 4 in configuration.")
+    else: app_logger.info("No pip pkgs for Ph4."); con.print_info("No pip pkgs for Ph4.")
 
-    # Step 3: Verify gnome-extensions-cli usability
     gext_cli_ready = False
     if phase4_config_data.get("gnome_extensions"): 
-        app_logger.info("Phase 4, Step 3: Verifying gnome-extensions-cli usability...")
-        gext_cli_ready = _verify_gext_cli_usability(target_user)
-        if not gext_cli_ready:
-            app_logger.error("gnome-extensions-cli not usable. GNOME extension installation will be skipped.")
-            con.print_error("gnome-extensions-cli not usable. GNOME extension installation will be skipped.")
-            overall_success = False 
-    else: 
-        app_logger.info("No GNOME extensions configured in YAML; skipping gnome-extensions-cli usability check.")
-        gext_cli_ready = True 
+        app_logger.info("Ph4, Step 3: Verify gext usability..."); gext_cli_ready = _verify_gext_cli_usability(target_user)
+        if not gext_cli_ready: app_logger.error("gext not usable. Skip ext install."); con.print_error("gext not usable. Skip ext install."); overall_success = False 
+    else: app_logger.info("No GNOME exts configured; skip gext usability check."); gext_cli_ready = True 
 
-    # Step 4: Install GNOME Extensions
     if gext_cli_ready and phase4_config_data.get("gnome_extensions"):
         gnome_extensions_cfg = phase4_config_data.get("gnome_extensions", {})
         if gnome_extensions_cfg: 
-            app_logger.info(f"Phase 4, Step 4: Installing and enabling GNOME Shell Extensions for user '{target_user}'...")
-            con.print_info(f"\nStep 4: Installing and enabling GNOME Shell Extensions for user '{target_user}'...")
+            app_logger.info(f"Ph4, Step 4: Install/enable GNOME exts for {target_user}."); con.print_info(f"\nStep 4: Install/enable GNOME exts for {target_user}...")
             extensions_success_all = True
             for ext_key__name, ext_config_dict in gnome_extensions_cfg.items(): 
-                ext_type = ext_config_dict.get("type")
-                pretty_name = ext_config_dict.get("name", ext_key__name) 
-                
-                app_logger.info(f"Processing extension: {pretty_name} (Type: {ext_type}, Key: {ext_key__name})")
-                con.print_sub_step(f"Processing extension: {pretty_name} (Type: {ext_type})")
+                ext_type = ext_config_dict.get("type"); pretty_name = ext_config_dict.get("name", ext_key__name) 
+                app_logger.info(f"Processing ext: {pretty_name} (Type: {ext_type}, Key: {ext_key__name})"); con.print_sub_step(f"Processing ext: {pretty_name} (Type: {ext_type})")
                 success_current_ext = False
-                if ext_type == "ego": 
-                    success_current_ext = _install_ego_extension(ext_key__name, ext_config_dict, target_user)
-                elif ext_type == "git": 
-                    success_current_ext = _install_git_extension(ext_key__name, ext_config_dict, target_user)
-                else: 
-                    app_logger.warning(f"Unknown GNOME extension type '{ext_type}' for '{pretty_name}'. Skipping.")
-                    con.print_warning(f"Unknown GNOME ext type '{ext_type}' for '{pretty_name}'. Skip.")
-                    extensions_success_all = False 
-                
-                if not success_current_ext: 
-                    extensions_success_all = False 
-            
-            if not extensions_success_all: 
-                overall_success = False
-                app_logger.warning("Some GNOME extensions failed to install/enable.")
-                con.print_warning("Some GNOME extensions failed.")
-            else: 
-                app_logger.info("All specified GNOME extensions processed.")
-                con.print_success("All specified GNOME extensions processed.")
-    elif not gext_cli_ready and phase4_config_data.get("gnome_extensions"):
-         app_logger.warning("Skipped GNOME extension installation due to gnome-extensions-cli setup/usability failure.")
-         con.print_warning("Skipped GNOME extension installation due to gnome-extensions-cli setup/usability failure.")
+                if ext_type == "ego": success_current_ext = _install_ego_extension(ext_key__name, ext_config_dict, target_user)
+                elif ext_type == "git": success_current_ext = _install_git_extension(ext_key__name, ext_config_dict, target_user)
+                else: app_logger.warning(f"Unknown GNOME ext type '{ext_type}' for '{pretty_name}'. Skip."); con.print_warning(f"Unknown GNOME ext type '{ext_type}'."); extensions_success_all = False 
+                if not success_current_ext: extensions_success_all = False 
+            if not extensions_success_all: overall_success = False; app_logger.warning("Some GNOME exts failed."); con.print_warning("Some GNOME exts failed.")
+            else: app_logger.info("All GNOME exts processed."); con.print_success("All GNOME exts processed.")
+    elif not gext_cli_ready and phase4_config_data.get("gnome_extensions"): app_logger.warning("Skipped GNOME ext install due to gext setup fail."); con.print_warning("Skipped GNOME ext install due to gext setup fail.")
 
-    # Step 5: Install Flatpak applications
-    app_logger.info("Phase 4, Step 5: Installing Flatpak applications...")
-    con.print_info("\nStep 5: Installing Flatpak applications (system-wide)...")
+    app_logger.info("Ph4, Step 5: Install Flatpak apps."); con.print_info("\nStep 5: Install Flatpak apps (system-wide)...")
     flatpak_apps_to_install = phase4_config_data.get("flatpak_apps", {})
     if flatpak_apps_to_install:
-        if not system_utils.install_flatpak_apps(
-                apps_to_install=flatpak_apps_to_install, 
-                system_wide=True, 
-                print_fn_info=con.print_info, 
-                print_fn_error=con.print_error, 
-                print_fn_sub_step=con.print_sub_step,
-                logger=app_logger
-            ):
-            overall_success = False
-            app_logger.error("Phase 4 Flatpak installation encountered issues.")
-            con.print_error("Phase 4 Flatpak installation encountered issues.")
-    else: 
-        app_logger.info("No Flatpak applications listed for installation in Phase 4.")
-        con.print_info("No Flatpak applications listed for installation in Phase 4.")
+        if not system_utils.install_flatpak_apps(apps_to_install=flatpak_apps_to_install, system_wide=True, print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step, logger=app_logger):
+            overall_success = False; app_logger.error("Ph4 Flatpak install issues."); con.print_error("Ph4 Flatpak install issues.")
+    else: app_logger.info("No Flatpak apps for Ph4."); con.print_info("No Flatpak apps for Ph4.")
 
-    # Step 6: Set dark theme preference
-    app_logger.info("Phase 4, Step 6: Setting system theme preference to dark mode...")
-    con.print_info("\nStep 6: Setting system theme preference to dark mode...")
+    app_logger.info("Ph4, Step 6: Set dark theme preference."); con.print_info("\nStep 6: Set dark theme preference...")
     if not _set_dark_theme_preference(target_user):
-        app_logger.warning(f"Failed to fully set dark theme preference for user '{target_user}'. Appearance might not be dark.")
-        con.print_warning(f"Failed to fully set dark theme preference for user '{target_user}'. Appearance might not be dark.")
-        # overall_success = False # Uncomment if this is critical for phase success
-
-    if overall_success:
-        app_logger.info("Phase 4: GNOME Configuration & Extensions completed successfully.")
-        con.print_success("Phase 4: GNOME Configuration & Extensions completed successfully.")
-        if phase4_config_data.get("gnome_extensions") or True: # True se abbiamo tentato di settare il tema
-            con.print_warning("IMPORTANT: A logout and login (or a GNOME Shell restart) "
-                              "is likely required for all theme and extension changes to take full effect.")
-    else:
-        app_logger.error("Phase 4: GNOME Configuration & Extensions completed with errors.")
-        con.print_error("Phase 4: GNOME Configuration & Extensions completed with errors. Please review the output and log file.")
-    
+        app_logger.warning(f"Failed to fully set dark theme for {target_user}."); con.print_warning(f"Failed to fully set dark theme for {target_user}.")
+        # overall_success = False # Decide if this is critical
+        
+    if overall_success: app_logger.info("Ph4 done successfully."); con.print_success("Phase 4: GNOME Configuration & Extensions completed successfully.")
+    else: app_logger.error("Ph4 done with errors."); con.print_error("Phase 4: GNOME Configuration & Extensions completed with errors. Review logs.")
     return overall_success
