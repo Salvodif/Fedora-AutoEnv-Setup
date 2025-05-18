@@ -5,6 +5,8 @@
 
 # Path to your Oh My Zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+
 
 # Set name of the theme to load --- if set to "random", it will
 # load a random theme each time Oh My Zsh is loaded, in which case,
@@ -91,8 +93,6 @@ alias top="btop"
 alias cat="bat"
 alias find="fd"
 
-export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
-
 eval "$(zoxide init --cmd cd zsh)"
 eval "$(atuin init zsh)"
 
@@ -107,4 +107,3 @@ PERL_MB_OPT="--install_base \"/home/blackpraedicator/perl5\""; export PERL_MB_OP
 PERL_MM_OPT="INSTALL_BASE=/home/blackpraedicator/perl5"; export PERL_MM_OPT;
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-

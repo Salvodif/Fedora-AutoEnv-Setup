@@ -17,7 +17,9 @@
       "dnf-plugins-core",
       "powerline-fonts",
       "bat",
-      "fzf"
+      "fzf",
+      "libreoffice-opensymbol-fonts",
+      "mscore-fonts-all"
     ],
     "dnf_swap_ffmpeg": {
       "from": "ffmpeg-free",
@@ -28,6 +30,8 @@
     ]
   },
   "phase3_terminal_enhancement": {
+    "zsh": "dnf install zsh",
+    
     "autin": "cargo install atuin",
     "eza": "cargo install eza",
     "fd-find": "cargo install fd-find",
