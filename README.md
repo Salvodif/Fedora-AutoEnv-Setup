@@ -39,16 +39,12 @@ Fedora-AutoEnv-Setup/
 *   **OS:** Fedora Linux 🐧 (This tool is tailored for Fedora).
 *   **Python:** Python 3.6+ 🐍.
 *   **Python Packages:**
-    *   `PyYAML`: For parsing the `packages.json` configuration file.
     *   `rich`: For the enhanced and colorful console output.
     Install them easily using `pip`:
     ```bash
-    sudo pip3 install PyYAML rich
+    sudo pip3 install rich
     ```
-    Alternatively, for a user-local installation (ensure `~/.local/bin` is in your `PATH`):
-    ```bash
-    pip3 install --user PyYAML rich
-    ```
+
 *   **🔑 Sudo Privileges:** The main `install.py` script **must** be run with `sudo`. Many operations (package installation, system-wide configuration changes, modifying user shells) require root access.
 
 ## 🔧 Configuration (`packages.json`)
@@ -111,9 +107,9 @@ During `Phase 3: Terminal Enhancement`, these files will be automatically copied
 3.  **🐍 Install Python Dependencies (if needed):**
     If you haven't installed these already for other projects:
     ```bash
-    sudo pip3 install PyYAML rich
+    sudo pip3 install rich
     ```
-    (Or use `pip3 install --user PyYAML rich` for a local user installation, ensuring `~/.local/bin` is in your `PATH`).
+    (Or use `pip3 install --user rich` for a local user installation, ensuring `~/.local/bin` is in your `PATH`).
 
 4.  **🚀 Run the Installer:**
     Execute the `install.py` script with `sudo`. **Key Point:** Run this command from the terminal session of the *regular user* whose environment you are setting up (e.g., your main desktop user). The script intelligently uses the `SUDO_USER` environment variable to identify this target user for all user-specific configurations (like shell changes and dotfile deployment).
