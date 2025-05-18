@@ -266,22 +266,46 @@ def run_phase4(app_config: dict) -> bool:
     _ = _get_user_home(target_user) 
     app_logger.info(f"Run GNOME configs for user: {target_user}"); con.print_info(f"Run GNOME configs for user: [bold cyan]{target_user}[/bold cyan]")
 
+    # Step 1: Install DNF packages (System-level tools)
     app_logger.info("Ph4, Step 1: Install DNF."); con.print_info("\nStep 1: Install DNF GNOME...")
     dnf_packages = phase4_config_data.get("dnf_packages", [])
     if dnf_packages:
         if not _install_dnf_packages_ph4(dnf_packages): overall_success = False
     else: app_logger.info("No DNF pkgs for Ph4."); con.print_info("No DNF pkgs for Ph4.")
 
+    # Step 2: Install pip packages (User-level CLI tools)
     app_logger.info(f"Ph4, Step 2: Install pip for {target_user}."); con.print_info(f"\nStep 2: Install pip for {target_user}...")
     pip_packages_to_install = phase4_config_data.get("pip_packages", []) 
     if pip_packages_to_install:
         if not _install_pip_packages_ph4(pip_packages_to_install, target_user): overall_success = False
     else: app_logger.info("No pip pkgs for Ph4."); con.print_info("No pip pkgs for Ph4.")
 
+    # Step 3: Install Flatpak applications (GUI Management Tools)
+    app_logger.info("Ph4, Step 3: Installing Flatpak applications (e.g., Extension Manager)...")
+    con.print_info("\nStep 3: Installing Flatpak applications (system-wide)...")
+    flatpak_apps_to_install = phase4_config_data.get("flatpak_apps", {})
+    if flatpak_apps_to_install:
+        if not system_utils.install_flatpak_apps(
+                apps_to_install=flatpak_apps_to_install, 
+                system_wide=True, # Assuming Extension Manager should be system-wide for all users
+                print_fn_info=con.print_info, 
+                print_fn_error=con.print_error, 
+                print_fn_sub_step=con.print_sub_step,
+                logger=app_logger
+            ):
+            overall_success = False
+            app_logger.error("Phase 4 Flatpak installation encountered issues.")
+            con.print_error("Phase 4 Flatpak installation encountered issues.")
+    else: 
+        app_logger.info("No Flatpak applications listed for Phase 4.")
+        con.print_info("No Flatpak applications listed for installation in Phase 4.")
+
+
+    # Step 4: Verify gnome-extensions-cli usability (after pip install)
     gext_cli_ready = False
     if phase4_config_data.get("gnome_extensions"): 
-        app_logger.info("Ph4, Step 3: Verify gext usability..."); 
-        con.print_info("\nStep 3: Verifying GNOME Extensions CLI tool...") # User message
+        app_logger.info("Ph4, Step 4: Verify gext usability..."); 
+        con.print_info("\nStep 4: Verifying GNOME Extensions CLI tool...") # User message
         gext_cli_ready = _verify_gext_cli_usability(target_user)
         if not gext_cli_ready: 
             app_logger.error("gext not usable. Skip ext install."); 
@@ -291,10 +315,11 @@ def run_phase4(app_config: dict) -> bool:
         app_logger.info("No GNOME exts configured; skip gext usability check.")
         gext_cli_ready = True # No extensions to install, so CLI is not critically needed
 
+    # Step 5: Install GNOME Extensions (EGO and Git)
     if gext_cli_ready and phase4_config_data.get("gnome_extensions"):
         gnome_extensions_cfg = phase4_config_data.get("gnome_extensions", {})
         if gnome_extensions_cfg: 
-            app_logger.info(f"Ph4, Step 4: Install/enable GNOME exts for {target_user}.")
+            app_logger.info(f"Ph4, Step 5: Install/enable GNOME exts for {target_user}.")
             # Inform user about potential interactivity
             con.print_panel(
                 "[bold yellow]Attention:[/]\n"
@@ -306,7 +331,7 @@ def run_phase4(app_config: dict) -> bool:
             )
             con.ask_question("Press Enter to continue with extension installation...") # Pause for user to read
 
-            con.print_info(f"\nStep 4: Installing and enabling GNOME Shell Extensions for user '{target_user}'...")
+            con.print_info(f"\nStep 5: Installing and enabling GNOME Shell Extensions for user '{target_user}'...")
             extensions_success_all = True
             for ext_key__name, ext_config_dict in gnome_extensions_cfg.items(): 
                 ext_type = ext_config_dict.get("type"); pretty_name = ext_config_dict.get("name", ext_key__name) 
@@ -321,13 +346,7 @@ def run_phase4(app_config: dict) -> bool:
     elif not gext_cli_ready and phase4_config_data.get("gnome_extensions"): 
         app_logger.warning("Skipped GNOME ext install due to gext setup fail."); con.print_warning("Skipped GNOME ext install due to gext setup fail.")
 
-    app_logger.info("Ph4, Step 5: Install Flatpak apps."); con.print_info("\nStep 5: Install Flatpak apps (system-wide)...")
-    flatpak_apps_to_install = phase4_config_data.get("flatpak_apps", {})
-    if flatpak_apps_to_install:
-        if not system_utils.install_flatpak_apps(apps_to_install=flatpak_apps_to_install, system_wide=True, print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step, logger=app_logger):
-            overall_success = False; app_logger.error("Ph4 Flatpak install issues."); con.print_error("Ph4 Flatpak install issues.")
-    else: app_logger.info("No Flatpak apps for Ph4."); con.print_info("No Flatpak apps for Ph4.")
-
+    # Step 6: Set dark theme preference
     app_logger.info("Ph4, Step 6: Set dark theme preference."); con.print_info("\nStep 6: Set dark theme preference...")
     if not _set_dark_theme_preference(target_user):
         app_logger.warning(f"Failed to fully set dark theme for {target_user}."); con.print_warning(f"Failed to fully set dark theme for {target_user}.")
