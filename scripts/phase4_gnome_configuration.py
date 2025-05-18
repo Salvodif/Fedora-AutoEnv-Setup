@@ -13,7 +13,7 @@ from typing import Optional, Dict, List
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scripts import console_output as con
 from scripts import config_loader
-from scripts import system_utils
+from scripts import system_utils # Import the module
 from scripts.logger_utils import app_logger 
 
 # --- Constants ---
@@ -21,27 +21,7 @@ GEXT_CLI_MODULE = "gnome_extensions_cli.cli"
 
 # --- Helper Functions ---
 
-def _get_target_user() -> Optional[str]:
-    """Determines the target user, typically from SUDO_USER."""
-    if os.geteuid() == 0: 
-        target_user = os.environ.get("SUDO_USER")
-        if not target_user:
-            app_logger.error("SUDO_USER env var not set while running as root.")
-            con.print_error("SUDO_USER not set. Cannot determine target user for GNOME setup.")
-            return None
-        try: # Verify user exists
-            system_utils.run_command(["id", "-u", target_user], capture_output=True, check=True, print_fn_info=None, logger=app_logger)
-        except:
-            app_logger.error(f"SUDO_USER '{target_user}' is not a valid system user.")
-            con.print_error(f"SUDO_USER '{target_user}' is not a valid system user.")
-            return None
-        app_logger.info(f"Target user for GNOME configuration: {target_user}")
-        return target_user
-    else:
-        current_user = os.getlogin()
-        app_logger.warning(f"Script not root. Assuming current user '{current_user}' for GNOME tasks.")
-        con.print_warning(f"Script not root. Assuming current user '{current_user}'. Some operations might need sudo if run standalone.")
-        return current_user
+# _get_target_user is now in system_utils.py
 
 def _install_dnf_packages(packages: List[str]) -> bool:
     """Installs specified DNF packages."""
@@ -105,7 +85,7 @@ def _process_ego_extension(ext_key: str, ext_cfg: Dict, target_user: str) -> boo
             app_logger.info(f"EGO ext '{name}' already installed/enabled (reported: {stderr_lower[:100]}).")
             con.print_info(f"EGO ext '{name}' already installed/enabled.")
             return True # Treat as success
-        app_logger.error(f"Error processing EGO ext '{name}': {e}", exc_info=False); con.print_error(f"Error EGO ext '{name}'."); return False
+        app_logger.error(f"Error processing EGO ext '{name}': {e.stderr if e.stderr else e.output}", exc_info=False); con.print_error(f"Error EGO ext '{name}'."); return False
     except Exception as e:
         app_logger.error(f"Unexpected error EGO ext '{name}': {e}", exc_info=True); con.print_error(f"Unexpected error EGO ext '{name}'."); return False
 
@@ -138,7 +118,11 @@ def _process_git_extension(ext_key: str, ext_cfg: Dict, target_user: str) -> boo
             system_utils.run_command(enable_cmd, run_as_user=target_user, shell=True, capture_output=True, check=True, print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
             con.print_success(f"Git ext '{name}' (UUID: {uuid}) enable command executed.")
         return True
-    except Exception as e: app_logger.error(f"Error Git ext '{name}': {e}", exc_info=True); con.print_error(f"Error Git ext '{name}'."); return False
+    except Exception as e: 
+        # Error details should be logged by run_command
+        app_logger.error(f"Error Git ext '{name}': {e}", exc_info=True if not isinstance(e, subprocess.CalledProcessError) else False)
+        con.print_error(f"Error Git ext '{name}'."); 
+        return False
 
 def _apply_dark_mode(target_user: str) -> bool:
     """Applies dark mode preference using gsettings."""
@@ -165,8 +149,14 @@ def run_phase4(app_config: dict) -> bool:
     cfg = config_loader.get_phase_data(app_config, "phase4_gnome_configuration")
     if not cfg: app_logger.warning("No config Ph4. Skip."); con.print_warning("No config Ph4. Skip."); return True 
 
-    target_user = _get_target_user()
-    if not target_user: return False 
+    target_user = system_utils.get_target_user(
+        logger=app_logger,
+        print_fn_info=con.print_info,
+        print_fn_error=con.print_error,
+        print_fn_warning=con.print_warning
+    )
+    if not target_user: 
+        return False # Error already logged by get_target_user
     
     app_logger.info(f"Run GNOME configs for: {target_user}"); con.print_info(f"Run GNOME configs for: [bold cyan]{target_user}[/bold cyan]")
 
@@ -212,7 +202,7 @@ def run_phase4(app_config: dict) -> bool:
                     else: app_logger.warning(f"Unknown ext type '{ext_type}' for '{ext_key}'."); con.print_warning(f"Unknown ext type '{ext_type}'."); all_ext_ok = False
                 if not all_ext_ok: overall_success = False; con.print_warning("Some extensions failed.")
                 else: con.print_success("All extensions processed.")
-        else: app_logger.info("No extensions listed in YAML."); con.print_info("No extensions to install.")
+        else: app_logger.info("No extensions listed in config."); con.print_info("No extensions to install.")
     elif not gext_ok and cfg.get("gnome_extensions"):
         con.print_warning("Skipped extension installation as GNOME Extensions CLI was not usable.")
         
@@ -225,9 +215,10 @@ def run_phase4(app_config: dict) -> bool:
     # Final summary
     if overall_success:
         app_logger.info("Phase 4 completed successfully."); con.print_success("Phase 4: GNOME Configuration & Extensions completed successfully.")
-        if cfg.get("gnome_extensions") or True: # If any visual changes were attempted
-             con.print_warning("IMPORTANT: A logout/login or GNOME Shell restart (Alt+F2, 'r', Enter) "
-                              "is likely required for all theme and extension changes to take full effect.")
+        # If the phase ran successfully, GNOME settings (dark mode) were attempted, and extensions might have been.
+        # So, a reboot/restart warning is generally useful.
+        con.print_warning("IMPORTANT: A logout/login or GNOME Shell restart (Alt+F2, 'r', Enter) "
+                          "is likely required for all theme and extension changes to take full effect.")
     else:
         app_logger.error("Phase 4 completed with errors."); con.print_error("Phase 4: GNOME Configuration & Extensions completed with errors. Review logs.")
     return overall_success

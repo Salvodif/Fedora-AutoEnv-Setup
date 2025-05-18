@@ -1,20 +1,20 @@
 # Fedora-AutoEnv-Setup/scripts/config_loader.py
 
-import yaml
+import json # Changed from yaml
 from pathlib import Path
 import sys
 
 # Default configuration filename
-DEFAULT_CONFIG_FILENAME = "packages.yaml"
+DEFAULT_CONFIG_FILENAME = "packages.json" # Changed from packages.yaml
 
 def load_configuration(config_file_path: str = None) -> dict:
     """
-    Loads configuration from a YAML file.
+    Loads configuration from a JSON file.
 
     Args:
         config_file_path (str, optional):
-            The path to the YAML configuration file.
-            If None, it looks for 'packages.yaml' in the following order:
+            The path to the JSON configuration file.
+            If None, it looks for 'packages.json' in the following order:
             1. Parent directory of this script (project root).
             2. Current working directory.
 
@@ -46,13 +46,13 @@ def load_configuration(config_file_path: str = None) -> dict:
 
     try:
         with open(path_to_check, 'r', encoding='utf-8') as f:
-            config_data = yaml.safe_load(f)
-        if config_data is None: # Empty YAML file or only comments
-            print(f"Warning: Configuration file '{path_to_check}' is empty or contains only comments.", file=sys.stderr)
+            config_data = json.load(f) # Changed from yaml.safe_load
+        if config_data is None: # Check for empty JSON object (though json.load would usually raise error for empty file)
+            print(f"Warning: Configuration file '{path_to_check}' is empty.", file=sys.stderr)
             return {}
         return config_data
-    except yaml.YAMLError as e:
-        print(f"Error parsing YAML file '{path_to_check}': {e}", file=sys.stderr)
+    except json.JSONDecodeError as e: # Changed from yaml.YAMLError
+        print(f"Error parsing JSON file '{path_to_check}': {e}", file=sys.stderr)
         return {}
     except IOError as e:
         print(f"I/O error reading file '{path_to_check}': {e}", file=sys.stderr)
@@ -81,9 +81,6 @@ def get_phase_data(config: dict, phase_name: str) -> dict:
     phase_config = config.get(phase_name)
 
     if phase_config is None:
-        # It's a common case that a phase might not be defined, so a warning might be too noisy.
-        # Consider if a silent failure or a debug log is more appropriate for your use case.
-        # For now, retaining a print statement for clarity during development.
         # print(f"Info: Phase '{phase_name}' not found in configuration.", file=sys.stderr)
         return {}
 

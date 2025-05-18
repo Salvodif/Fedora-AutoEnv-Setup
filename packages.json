@@ -1,0 +1,168 @@
+{
+  "phase1_system_preparation": {
+    "dnf_packages": [
+      "dnf5",
+      "dnf5-plugins",
+      "flatpak"
+    ]
+  },
+  "phase2_basic_configuration": {
+    "dnf_packages": [
+      "git",
+      "curl",
+      "cargo",
+      "zsh",
+      "python3",
+      "python3-pip",
+      "stow",
+      "dnf-plugins-core",
+      "powerline-fonts",
+      "bat",
+      "fzf"
+    ],
+    "dnf_swap_ffmpeg": {
+      "from": "ffmpeg-free",
+      "to": "ffmpeg"
+    },
+    "dnf_groups_sound_video": [
+      "sound-and-video"
+    ]
+  },
+  "phase3_terminal_enhancement": {
+    "omz": "sh -c \"$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)\"",
+    "autin": "cargo install atuin",
+    "eza": "cargo install eza",
+    "fd-find": "cargo install fd-find",
+    "zoxide": "curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh",
+    "zsh-autosuggestions": "git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions",
+    "zsh-syntax-highlighting": "git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting",
+    "you-should-use": "git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/you-should-use",
+    "zsh-eza": "git clone https://github.com/z-shell/zsh-eza.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-eza",
+    "fzf-tab": "git clone https://github.com/Aloxaf/fzf-tab ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/fzf-tab"
+  },
+  "phase4_gnome_configuration": {
+    "dnf_packages": [
+      "gnome-tweaks",
+      "gnome-shell-extension-common"
+    ],
+    "pip_packages": [
+      "gnome-extensions-cli"
+    ],
+    "flatpak_apps": {
+      "com.mattjakeman.ExtensionManager": "GNOME Extension Manager"
+    },
+    "gnome_extensions": {
+      "user-themes": {
+        "type": "ego",
+        "uuid": "user-theme@gnome-shell-extensions.gcampax.github.com",
+        "name": "User Themes",
+        "numerical_id": "19"
+      },
+      "quick-settings-tweaks": {
+        "type": "git",
+        "url": "https://github.com/qwreey/quick-settings-tweaks.git",
+        "install_script": "install.sh",
+        "name": "Quick Settings Tweaks",
+        "uuid_to_enable": "quick-settings-tweaks@qwreey"
+      },
+      "just-perfection": {
+        "type": "ego",
+        "uuid": "just-perfection-desktop@just-perfection",
+        "numerical_id": "3843",
+        "name": "Just Perfection"
+      },
+      "rounded-window-corners": {
+        "type": "ego",
+        "uuid": "rounded-window-corners@yilozt",
+        "numerical_id": "5237",
+        "name": "Rounded Window Corners"
+      },
+      "dash-to-dock": {
+        "type": "ego",
+        "uuid": "dash-to-dock@micxgx.gmail.com",
+        "numerical_id": "307",
+        "name": "Dash to Dock"
+      },
+      "blur-my-shell": {
+        "type": "ego",
+        "uuid": "blur-my-shell@aunetx",
+        "numerical_id": "3193",
+        "name": "Blur my Shell"
+      },
+      "bluetooth-quick-connect": {
+        "type": "ego",
+        "uuid": "bluetooth-quick-connect@bjarosze.gmail.com",
+        "numerical_id": "1401",
+        "name": "Bluetooth Quick Connect"
+      },
+      "clipboard-indicator": {
+        "type": "ego",
+        "uuid": "clipboard-indicator@tudmotu.com",
+        "numerical_id": "779",
+        "name": "Clipboard Indicator"
+      },
+      "wireless-hid": {
+        "type": "ego",
+        "uuid": "wireless-hid@chlumskyvaclav.gmail.com",
+        "numerical_id": "5764",
+        "name": "Wireless HID"
+      },
+      "logo-menu": {
+        "type": "ego",
+        "uuid": "logo-menu@fthx",
+        "numerical_id": "442",
+        "name": "Logo Menu"
+      }
+    }
+  },
+  "phase5_nvidia_installation": {
+    "dnf_packages_standard": [
+      "akmod-nvidia",
+      "xorg-x11-drv-nvidia-cuda"
+    ],
+    "dnf_package_tainted_repo": "rpmfusion-nonfree-release-tainted",
+    "dnf_swap_open_drivers": {
+      "from": "akmod-nvidia",
+      "to": "akmod-nvidia-open"
+    }
+  },
+  "phase6_additional_packages": {
+    "dnf_packages": [
+      "btop",
+      "fastfetch",
+      "steam",
+      "timeshift",
+      "unzip",
+      "p7zip",
+      "p7zip-plugins"
+    ],
+    "custom_repo_dnf_packages": {
+      "visual_studio_code": {
+        "name": "Visual Studio Code",
+        "check_if_installed_pkg": "code",
+        "repo_setup_commands": [
+          "sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc",
+          "echo -e \"[code]\\nname=Visual Studio Code\\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\\nenabled=1\\nautorefresh=1\\ntype=rpm-md\\ngpgcheck=1\\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc\" | sudo tee /etc/yum.repos.d/vscode.repo > /dev/null"
+        ],
+        "dnf_package_to_install": "code"
+      },
+      "google_chrome": {
+        "name": "Google Chrome",
+        "check_if_installed_pkg": "google-chrome-stable",
+        "repo_setup_commands": [
+            "sudo dnf install -y fedora-workstation-repositories",
+            "sudo dnf config-manager --set-enabled google-chrome"
+        ],
+        "dnf_package_to_install": "google-chrome-stable"
+      }
+    },
+    "flatpak_apps": {
+      "org.gimp.GIMP": "GIMP (Image Editor)",
+      "com.spotify.Client": "Spotify (Music Streaming)",
+      "com.discordapp.Discord": "Discord (Chat)",
+      "com.obsproject.Studio": "OBS Studio (Screen Recording/Streaming)",
+      "com.usebottles.bottles": "Bottles lets you run Windows software on Linux",
+      "com.github.tchx84.Flatseal": "Flatseal is a graphical utility to review and modify permissions from your Flatpak applications"
+    }
+  }
+}

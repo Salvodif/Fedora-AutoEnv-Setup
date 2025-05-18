@@ -46,16 +46,17 @@ def _install_dnf_packages_ph6(packages: List[str]) -> bool:
 def _is_package_already_installed(pkg_name: str) -> bool:
     """Checks if a DNF package is already installed using 'rpm -q'."""
     if not pkg_name:
-        return False # Cannot check an empty package name
+        app_logger.debug("Empty package name passed to _is_package_already_installed.")
+        return False 
     app_logger.debug(f"Checking if package '{pkg_name}' is installed.")
     try:
         check_cmd = ["rpm", "-q", pkg_name]
         proc = system_utils.run_command(
             check_cmd, 
             capture_output=True, 
-            check=False, # rpm -q exits non-zero if not installed, which is not an error for this check
-            print_fn_info=None, # Suppress "Executing..." for this quiet check
-            logger=app_logger # Log the check command execution itself at debug level
+            check=False, 
+            print_fn_info=None, 
+            logger=app_logger 
         )
         if proc.returncode == 0:
             app_logger.info(f"Package '{pkg_name}' is already installed.")
@@ -102,7 +103,7 @@ def _install_custom_repo_dnf_package(pkg_key: str, pkg_config: Dict[str, Any]) -
             try:
                 system_utils.run_command(
                     cmd_str_from_yaml, 
-                    shell=True, # ALWAYS use shell=True for these YAML-defined full command strings
+                    shell=True, 
                     check=True,
                     print_fn_info=con.print_info, 
                     print_fn_error=con.print_error,
@@ -145,7 +146,7 @@ def run_phase6(app_config: dict) -> bool:
     
     phase6_config = config_loader.get_phase_data(app_config, "phase6_additional_packages")
     if not phase6_config:
-        app_logger.warning("No configuration found for Phase 6 in YAML. Skipping phase.")
+        app_logger.warning("No configuration found for Phase 6 in config. Skipping phase.")
         con.print_warning("No configuration found for Phase 6. Skipping additional package installation.")
         return True 
 
@@ -167,9 +168,9 @@ def run_phase6(app_config: dict) -> bool:
     if custom_repo_pkgs:
         for pkg_key, pkg_conf_dict in custom_repo_pkgs.items():
             if not isinstance(pkg_conf_dict, dict):
-                app_logger.warning(f"Invalid configuration for custom DNF package '{pkg_key}' in YAML. Expected a dictionary. Skipping.")
+                app_logger.warning(f"Invalid configuration for custom DNF package '{pkg_key}' in config. Expected a dictionary. Skipping.")
                 con.print_warning(f"Invalid configuration for custom DNF package '{pkg_key}'. Skipping.")
-                overall_success = False # Mark as an issue
+                overall_success = False 
                 continue
             if not _install_custom_repo_dnf_package(pkg_key, pkg_conf_dict):
                 overall_success = False
@@ -191,8 +192,7 @@ def run_phase6(app_config: dict) -> bool:
             logger=app_logger
         ):
             overall_success = False
-            app_logger.error("Phase 6 Flatpak installation encountered issues.")
-            con.print_error("Phase 6 Flatpak installation encountered issues.")
+            # Error messages already printed by install_flatpak_apps and logged
     else:
         app_logger.info("No Flatpak applications listed for Phase 6.")
         con.print_info("No additional Flatpak applications listed for installation in Phase 6.")
