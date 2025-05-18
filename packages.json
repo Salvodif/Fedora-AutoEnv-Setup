@@ -31,8 +31,6 @@
     ]
   },
   "phase3_terminal_enhancement": {
-    "zsh": "dnf install zsh",
-    
     "autin": "cargo install atuin",
     "eza": "cargo install eza",
     "fd-find": "cargo install fd-find",
