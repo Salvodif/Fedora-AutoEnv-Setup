@@ -1,4 +1,4 @@
-# aggiornamento 28 marz 2025
+# updated 18 May 2025
 
 # If you come from bash you might have to change your $PATH.
 # export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
@@ -89,6 +89,7 @@ source $ZSH/oh-my-zsh.sh
 alias df="dust"
 alias top="btop"
 alias cat="bat"
+alias find="fd"
 
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
@@ -107,4 +108,3 @@ PERL_MM_OPT="INSTALL_BASE=/home/blackpraedicator/perl5"; export PERL_MM_OPT;
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
-. "$HOME/.atuin/bin/env"
