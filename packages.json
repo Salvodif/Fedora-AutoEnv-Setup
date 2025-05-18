@@ -19,7 +19,8 @@
       "bat",
       "fzf",
       "libreoffice-opensymbol-fonts",
-      "mscore-fonts-all"
+      "mscore-fonts-all",
+      "zsh"
     ],
     "dnf_swap_ffmpeg": {
       "from": "ffmpeg-free",
