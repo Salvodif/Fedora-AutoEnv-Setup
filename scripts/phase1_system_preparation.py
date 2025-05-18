@@ -410,7 +410,7 @@ def _setup_flatpak() -> bool:
         return True
     except FileNotFoundError: 
         con.print_warning("'flatpak' command not found. Is Flatpak installed?")
-        con.print_info("Consider adding 'flatpak' to 'phase1_system_preparation.dnf_packages' in your packages.yaml.")
+        con.print_info("Consider adding 'flatpak' to 'phase1_system_preparation.dnf_packages' in your packages.json.")
         return False 
     except subprocess.CalledProcessError as e: 
         con.print_error(f"Failed to setup Flathub repository. Error: {e}")

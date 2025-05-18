@@ -12,17 +12,15 @@ from scripts import config_loader
 from scripts import phase1_system_preparation
 from scripts import phase2_basic_installation
 from scripts import phase3_terminal_enhancement
-from scripts import phase4_gnome_configuration # Import new phase
-from scripts import phase5_nvidia_installation # Import new phase
-from scripts import phase6_additional_packages # Import new phase
+from scripts import phase4_gnome_configuration
+from scripts import phase5_nvidia_installation
+from scripts import phase6_additional_packages
 
 
 # --- Constants ---
 STATUS_FILE_NAME = "install_status.json"
-CONFIG_FILE_NAME = "packages.yaml" # Referenced by config_loader
+CONFIG_FILE_NAME = "packages.json"
 
-# Define phase names (keys should match those in packages.yaml for consistency)
-# These will also be the keys in our status file.
 PHASES = {
     "phase1_system_preparation": {
         "name": "Phase 1: System Preparation ⚙️",
@@ -170,7 +168,7 @@ def main():
         #     sys.exit(1)
         # Note: Some phases determine target_user from SUDO_USER, so running via `sudo ./install.py` is preferred.
 
-        # Load application-wide configuration from packages.yaml
+        # Load application-wide configuration from packages
         app_config = config_loader.load_configuration(CONFIG_FILE_NAME) # Explicitly pass filename
         if not app_config: # load_configuration returns {} on error or empty file
             # Check if the file itself is missing, as load_configuration prints detailed errors

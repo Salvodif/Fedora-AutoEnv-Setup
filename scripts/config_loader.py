@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 
 # Default configuration filename
-DEFAULT_CONFIG_FILENAME = "packages.json" # Changed from packages.yaml
+DEFAULT_CONFIG_FILENAME = "packages.json" # Changed from packages.json
 
 def load_configuration(config_file_path: str = None) -> dict:
     """
