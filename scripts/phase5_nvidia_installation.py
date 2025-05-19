@@ -28,29 +28,29 @@ def _check_kernel_updated(pre_update_kernel: str) -> bool:
     except Exception as e:
         con.print_warning(f"Could not determine current kernel version: {e}")
         app_logger.warning(f"Could not determine current kernel: {e}", exc_info=True)
-        return False # Assume not updated if check fails
+        return False 
 
 def _is_nvidia_package_installed(package_name_part: str = "akmod-nvidia") -> bool:
     """Checks if any NVIDIA driver package (like akmod-nvidia or akmod-nvidia-open) is installed."""
     app_logger.debug(f"Checking if NVIDIA package like '{package_name_part}' is installed.")
     try:
-        check_std_cmd = ["rpm", "-q", "akmod-nvidia"]
+        # Check for standard akmod-nvidia
         std_proc = system_utils.run_command(
-            check_std_cmd, capture_output=True, check=False, 
-            print_fn_info=None, logger=app_logger # Quiet check
+            ["rpm", "-q", "akmod-nvidia"], capture_output=True, check=False, 
+            print_fn_info=None, logger=app_logger 
         )
         if std_proc.returncode == 0:
-            con.print_info(f"Standard NVIDIA driver package 'akmod-nvidia' seems to be installed.")
+            con.print_info("Standard NVIDIA driver package 'akmod-nvidia' seems to be installed.")
             app_logger.info("'akmod-nvidia' found.")
             return True
 
-        check_open_cmd = ["rpm", "-q", "akmod-nvidia-open"]
+        # Check for open akmod-nvidia
         open_proc = system_utils.run_command(
-            check_open_cmd, capture_output=True, check=False, 
-            print_fn_info=None, logger=app_logger # Quiet check
+            ["rpm", "-q", "akmod-nvidia-open"], capture_output=True, check=False, 
+            print_fn_info=None, logger=app_logger
         )
         if open_proc.returncode == 0:
-            con.print_info(f"Open NVIDIA driver package 'akmod-nvidia-open' seems to be installed.")
+            con.print_info("Open NVIDIA driver package 'akmod-nvidia-open' seems to be installed.")
             app_logger.info("'akmod-nvidia-open' found.")
             return True
             
@@ -76,33 +76,38 @@ def _enable_rpm_fusion_tainted_repo(phase_cfg: dict) -> bool:
         return True 
 
     app_logger.info(f"Ensuring RPM Fusion tainted repo '{tainted_repo_pkg}' is enabled.")
-    con.print_sub_step(f"Ensuring RPM Fusion non-free tainted repository ('{tainted_repo_pkg}') is enabled...")
+    # con.print_sub_step(f"Ensuring RPM Fusion non-free tainted repository ('{tainted_repo_pkg}') is enabled...") # Handled by install_dnf_packages
+
     try:
-        check_cmd = ["rpm", "-q", tainted_repo_pkg]
         check_proc = system_utils.run_command(
-            check_cmd, capture_output=True, check=False, 
-            print_fn_info=None, logger=app_logger # Quiet check
+            ["rpm", "-q", tainted_repo_pkg], capture_output=True, check=False, 
+            print_fn_info=None, logger=app_logger
         )
         if check_proc.returncode == 0:
             con.print_info(f"Package '{tainted_repo_pkg}' is already installed.")
             app_logger.info(f"Tainted repo package '{tainted_repo_pkg}' already installed.")
             return True
 
-        cmd = ["sudo", "dnf", "install", "-y", tainted_repo_pkg]
-        system_utils.run_command(
-            cmd, capture_output=True, check=True,
-            print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step,
-            logger=app_logger
-        )
-        con.print_success(f"RPM Fusion non-free tainted repository ('{tainted_repo_pkg}') enabled.")
-        app_logger.info(f"Enabled RPM Fusion tainted repo '{tainted_repo_pkg}'.")
-        return True
+        if system_utils.install_dnf_packages(
+            [tainted_repo_pkg],
+            print_fn_info=con.print_info, print_fn_error=con.print_error, 
+            print_fn_sub_step=con.print_sub_step, logger=app_logger
+        ):
+            con.print_success(f"RPM Fusion non-free tainted repository ('{tainted_repo_pkg}') enabled.")
+            app_logger.info(f"Enabled RPM Fusion tainted repo '{tainted_repo_pkg}'.")
+            return True
+        else:
+            # Error already printed by install_dnf_packages
+            app_logger.error(f"Failed to enable tainted repo '{tainted_repo_pkg}'.")
+            return False
+            
     except FileNotFoundError:
-        con.print_error("'rpm' or 'dnf' command not found. Cannot enable tainted repository.")
-        app_logger.error("'rpm' or 'dnf' not found, cannot enable tainted repo.")
+        con.print_error("'rpm' command not found. Cannot check or enable tainted repository.")
+        app_logger.error("'rpm' not found, cannot enable tainted repo.")
         return False
-    except Exception: 
-        app_logger.error(f"Failed to enable tainted repo '{tainted_repo_pkg}'.", exc_info=True)
+    except Exception as e: # Catch any other unexpected errors
+        app_logger.error(f"Unexpected error enabling tainted repo '{tainted_repo_pkg}': {e}", exc_info=True)
+        con.print_error(f"Unexpected error enabling tainted repo '{tainted_repo_pkg}'.")
         return False
 
 
@@ -114,20 +119,17 @@ def _install_standard_nvidia_drivers(phase_cfg: dict) -> bool:
         app_logger.info("No standard NVIDIA packages in config. Skipping.")
         return True
 
-    app_logger.info(f"Installing standard NVIDIA drivers: {packages_to_install}")
-    con.print_sub_step(f"Installing standard NVIDIA drivers: {', '.join(packages_to_install)}")
-    try:
-        cmd = ["sudo", "dnf", "install", "-y"] + packages_to_install
-        system_utils.run_command(
-            cmd, capture_output=True, check=True, 
-            print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step,
-            logger=app_logger
-        )
-        con.print_success(f"Standard NVIDIA DNF packages ({', '.join(packages_to_install)}) installed.")
+    # con.print_sub_step(f"Installing standard NVIDIA drivers: {', '.join(packages_to_install)}") # Handled by install_dnf_packages
+    if system_utils.install_dnf_packages(
+        packages_to_install,
+        print_fn_info=con.print_info, print_fn_error=con.print_error,
+        print_fn_sub_step=con.print_sub_step, logger=app_logger
+    ):
+        # con.print_success(f"Standard NVIDIA DNF packages ({', '.join(packages_to_install)}) installed.") # Handled by install_dnf_packages
         app_logger.info(f"Installed standard NVIDIA packages: {packages_to_install}")
         return True
-    except Exception: 
-        app_logger.error(f"Failed to install standard NVIDIA packages: {packages_to_install}", exc_info=True)
+    else:
+        app_logger.error(f"Failed to install standard NVIDIA packages: {packages_to_install}")
         return False
 
 def _swap_to_nvidia_open_drivers(phase_cfg: dict) -> bool:
@@ -146,40 +148,19 @@ def _swap_to_nvidia_open_drivers(phase_cfg: dict) -> bool:
         app_logger.error(f"Invalid from/to for open driver swap: from='{from_pkg}', to='{to_pkg}'.")
         return False
 
-    app_logger.info(f"Attempting swap from '{from_pkg}' to NVIDIA open driver '{to_pkg}'.")
-    con.print_sub_step(f"Attempting to swap DNF package '{from_pkg}' with NVIDIA open driver '{to_pkg}'...")
-    try:
-        check_cmd = ["rpm", "-q", from_pkg]
-        check_proc = system_utils.run_command(
-            check_cmd, capture_output=True, check=False, 
-            print_fn_info=None, logger=app_logger # Quiet check
-        )
-
-        if check_proc.returncode != 0: 
-            con.print_info(f"Package '{from_pkg}' is not installed. Attempting direct install of '{to_pkg}'.")
-            app_logger.info(f"'{from_pkg}' not installed. Direct install of '{to_pkg}'.")
-            install_cmd = ["sudo", "dnf", "install", "-y", to_pkg]
-            system_utils.run_command(
-                install_cmd, capture_output=True, check=True, 
-                print_fn_info=con.print_info, print_fn_error=con.print_error,
-                logger=app_logger
-            )
-            con.print_success(f"NVIDIA open driver '{to_pkg}' installed directly.")
-            app_logger.info(f"NVIDIA open driver '{to_pkg}' installed directly.")
-            return True
-
-        swap_cmd = ["sudo", "dnf", "swap", "-y", from_pkg, to_pkg]
-        system_utils.run_command(
-            swap_cmd, capture_output=True, check=True,
-            print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step,
-            logger=app_logger
-        )
-        con.print_success(f"DNF package '{from_pkg}' successfully swapped with '{to_pkg}'.")
+    # con.print_sub_step(f"Attempting to swap DNF package '{from_pkg}' with NVIDIA open driver '{to_pkg}'...") # Handled by swap_dnf_packages
+    if system_utils.swap_dnf_packages(
+        from_pkg, to_pkg,
+        print_fn_info=con.print_info, print_fn_error=con.print_error,
+        print_fn_sub_step=con.print_sub_step, logger=app_logger
+    ):
+        # con.print_success(f"DNF package '{from_pkg}' successfully swapped with '{to_pkg}'.") # Handled by swap_dnf_packages
         app_logger.info(f"Swapped '{from_pkg}' with '{to_pkg}'.")
         return True
-    except Exception: 
-        app_logger.error(f"Failed to swap '{from_pkg}' with '{to_pkg}'.", exc_info=True)
+    else:
+        # Error handled by swap_dnf_packages
         con.print_warning(f"Failed to swap '{from_pkg}' with '{to_pkg}'. This might be due to '{to_pkg}' not being available or conflicts.")
+        app_logger.error(f"Failed to swap '{from_pkg}' with '{to_pkg}'.")
         return False
 
 # --- Main Phase Function ---
@@ -195,7 +176,6 @@ def run_phase5(app_config: dict) -> bool:
         app_logger.warning("No Phase 5 config. Skipping.")
         return True 
 
-    # 0. User Confirmation
     con.print_panel(
         "[bold yellow]WARNING:[/] This phase will attempt to install NVIDIA proprietary drivers. \n"
         "Ensure you have a [bold]compatible NVIDIA GPU[/] (GT/GTX 600 series or newer, RTX series).\n"
@@ -217,7 +197,6 @@ def run_phase5(app_config: dict) -> bool:
             app_logger.info("NVIDIA drivers already installed, user skipped further steps.")
             return True
 
-    # 1. System Update and Reboot Check
     con.print_info("\nStep 1: Ensuring system is up-to-date for kernel compatibility...")
     app_logger.info("Phase 5, Step 1: System update check.")
     try:
@@ -229,14 +208,14 @@ def run_phase5(app_config: dict) -> bool:
         app_logger.info(f"Kernel before update attempt: {kernel_before_update}")
 
         con.print_sub_step("Running 'sudo dnf update -y' to update system and kernel...")
-        system_utils.run_command(
-            ["sudo", "dnf", "update", "-y"], 
-            capture_output=False, 
-            check=True,
-            print_fn_info=con.print_info, print_fn_error=con.print_error,
-            logger=app_logger
-        )
-        con.print_success("System update command completed.")
+        if not system_utils.upgrade_system_dnf(
+            print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger
+            # capture_output=False is default in upgrade_system_dnf
+        ):
+            con.print_error("System update command failed. Cannot safely proceed.") # upgrade_system_dnf also prints error
+            return False
+        
+        # con.print_success("System update command completed.") # upgrade_system_dnf handles success message
         app_logger.info("DNF update command completed.")
 
         if _check_kernel_updated(kernel_before_update):
@@ -256,19 +235,17 @@ def run_phase5(app_config: dict) -> bool:
             con.print_info("Kernel does not appear to have been updated. No immediate reboot necessary for kernel reasons.")
             app_logger.info("Kernel does not appear to have been updated.")
 
-    except Exception as e:
-        con.print_error(f"System update step failed: {e}. Cannot safely proceed with NVIDIA driver installation.")
-        app_logger.error(f"System update step failed: {e}", exc_info=True)
+    except Exception as e: # Catch unexpected errors during the update check logic itself
+        con.print_error(f"System update step encountered an unexpected issue: {e}. Cannot safely proceed with NVIDIA driver installation.")
+        app_logger.error(f"System update step unexpected error: {e}", exc_info=True)
         return False
 
-    # 2. Enable RPM Fusion Non-Free Tainted Repo (if specified)
     con.print_info("\nStep 2: Enabling RPM Fusion Non-Free Tainted Repository (if configured)...")
     app_logger.info("Phase 5, Step 2: Enabling RPM Fusion tainted repo.")
     if not _enable_rpm_fusion_tainted_repo(phase5_config):
         con.print_warning("Could not enable RPM Fusion non-free tainted repository. Some NVIDIA features might be unavailable.")
         app_logger.warning("Failed to enable RPM Fusion tainted repo. Continuing, but some features might be unavailable.")
     
-    # 3. Choose driver type: Standard Proprietary or Open Kernel Modules
     con.print_info("\nStep 3: Selecting NVIDIA Driver Type...")
     app_logger.info("Phase 5, Step 3: Selecting NVIDIA driver type.")
     driver_choice = ""
@@ -328,7 +305,6 @@ def run_phase5(app_config: dict) -> bool:
         app_logger.error(f"Invalid driver_choice '{driver_choice}'. Aborting.")
         return False
 
-    # 4. Post-installation steps
     if installation_done:
         app_logger.info("NVIDIA driver DNF operations completed.")
         con.print_info("\nStep 4: Post-installation procedures...")
@@ -341,7 +317,7 @@ def run_phase5(app_config: dict) -> bool:
         if con.confirm_action("Do you want this script to pause for 5 minutes to allow kmod build time?", default=True):
             con.print_info("Pausing for 5 minutes...")
             app_logger.info("Pausing for 5 minutes for kmod build.")
-            for i in range(5 * 60, 0, -1): # 5 minutes
+            for i in range(5 * 60, 0, -1):
                 mins, secs = divmod(i, 60)
                 con.console.print(f"  Waiting... {mins:02d}:{secs:02d} remaining", end="\r")
                 time.sleep(1)

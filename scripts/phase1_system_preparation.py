@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from scripts import console_output as con
 from scripts import config_loader
 from scripts import system_utils
+from scripts.logger_utils import app_logger # Added logger import
 
 # --- Constants ---
 GOOGLE_DNS_IPV4 = ["8.8.8.8", "8.8.4.4"]
@@ -32,8 +33,6 @@ def _backup_file(filepath: Path, sudo: bool = True) -> bool:
     
     timestamp_suffix = f"{Path.cwd().name.replace(' ','_')}_{int(time.time())}"
     backup_path = filepath.with_name(f"{filepath.name}.backup_{timestamp_suffix}")
-    # No loop for unique backup needed if timestamp is granular enough for a single script run.
-    # If rerunning phase quickly, a counter might be better or more specific timestamp.
 
     con.print_info(f"Backing up {filepath} to {backup_path}...")
     try:
@@ -42,44 +41,19 @@ def _backup_file(filepath: Path, sudo: bool = True) -> bool:
         
         system_utils.run_command(
             ["sudo", "cp", "-pf", str(filepath), str(backup_path)],
-            print_fn_info=con.print_info, print_fn_error=con.print_error
+            print_fn_info=con.print_info, print_fn_error=con.print_error,
+            logger=app_logger
         )
         return True
     except Exception as e:
         con.print_warning(f"Could not back up {filepath}. Error: {e}")
         return False
 
-def _append_to_file_sudo(filepath: Path, content_to_append: str):
-    """Appends content to a file using sudo tee -a. Best for privileged files."""
-    con.print_info(f"Ensuring content is appended to {filepath} (sudo):\n{content_to_append.strip()}")
-    command_str = f"echo -e {shlex.quote(content_to_append)} | sudo tee -a {shlex.quote(str(filepath))} > /dev/null"
-    system_utils.run_command(
-        command_str,
-        shell=True, 
-        print_fn_info=con.print_info,
-        print_fn_error=con.print_error
-    )
+# _append_to_file_sudo removed as not directly used after refactor, can be re-added if needed for other purposes
 
 # --- Phase Specific Functions ---
 
-def _install_phase_packages(phase_cfg: dict) -> bool:
-    """Installs DNF packages specified in the phase configuration."""
-    dnf_packages = phase_cfg.get("dnf_packages", [])
-    if not dnf_packages:
-        con.print_info("No DNF packages specified for this sub-phase.")
-        return True
-
-    con.print_sub_step(f"Installing DNF packages: {', '.join(dnf_packages)}")
-    try:
-        cmd = ["sudo", "dnf", "install", "-y"] + dnf_packages
-        system_utils.run_command(
-            cmd, capture_output=True,
-            print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step
-        )
-        con.print_success("Specified DNF packages installed successfully.")
-        return True
-    except Exception: 
-        return False
+# _install_phase_packages is removed, system_utils.install_dnf_packages will be used
 
 def _configure_dns() -> bool:
     """Configures system DNS, preferring systemd-resolved, then attempting /etc/resolv.conf."""
@@ -93,13 +67,12 @@ def _configure_dns() -> bool:
                 con.print_info(f"{RESOLV_CONF_PATH} is a symlink pointing to a systemd-resolved managed file: {link_target}")
         except OSError: pass 
 
-    if not systemd_active: # If not a known symlink, check the service status
+    if not systemd_active: 
         try:
-            # Check if systemd-resolved service is active and running
             status_proc = system_utils.run_command(
                 ["systemctl", "is-active", "systemd-resolved.service"],
                 capture_output=True, check=False, 
-                print_fn_info=con.print_info 
+                print_fn_info=con.print_info, logger=app_logger
             )
             if status_proc.returncode == 0 and status_proc.stdout.strip() == "active":
                 systemd_active = True
@@ -114,12 +87,11 @@ def _configure_dns() -> bool:
         con.print_info(f"systemd-resolved detected. Attempting to configure DNS via {SYSTEMD_RESOLVED_CONF_PATH}.")
         if not SYSTEMD_RESOLVED_CONF_PATH.exists():
             con.print_info(f"{SYSTEMD_RESOLVED_CONF_PATH} does not exist. Creating with default [Resolve] section.")
-            # Create the file with sudo if it doesn't exist, with a [Resolve] header
             try:
                 system_utils.run_command(
                     f"sudo mkdir -p {SYSTEMD_RESOLVED_CONF_PATH.parent} && "
                     f"echo '[Resolve]' | sudo tee {SYSTEMD_RESOLVED_CONF_PATH} > /dev/null",
-                    shell=True, check=True, print_fn_info=con.print_info
+                    shell=True, check=True, print_fn_info=con.print_info, logger=app_logger
                 )
             except Exception as e_create:
                 con.print_error(f"Failed to create {SYSTEMD_RESOLVED_CONF_PATH}: {e_create}")
@@ -128,12 +100,10 @@ def _configure_dns() -> bool:
         _backup_file(SYSTEMD_RESOLVED_CONF_PATH) 
         
         try:
-            # Use ConfigParser to manage resolved.conf (it's an INI-like file)
             parser = configparser.ConfigParser(comment_prefixes=('#',';'), allow_no_value=True, strict=False)
-            # Read current config (sudo cat needed as resolved.conf is root-owned)
             read_proc = system_utils.run_command(
                 ["sudo", "cat", str(SYSTEMD_RESOLVED_CONF_PATH)], capture_output=True, check=True,
-                print_fn_info=con.print_info
+                print_fn_info=con.print_info, logger=app_logger
             )
             parser.read_string(read_proc.stdout)
 
@@ -141,12 +111,10 @@ def _configure_dns() -> bool:
                 parser.add_section("Resolve")
 
             changes_made = False
-            # Combine IPv4 and IPv6 DNS servers into a single space-separated string for systemd-resolved
             all_google_dns = GOOGLE_DNS_IPV4 + GOOGLE_DNS_IPV6
             dns_servers_str = " ".join(all_google_dns)
             
             current_dns = parser.get("Resolve", "DNS", fallback="").strip()
-            # Check if all our DNS servers are already present (order might differ)
             all_present = True
             current_dns_list = current_dns.split()
             for dns_ip in all_google_dns:
@@ -154,11 +122,11 @@ def _configure_dns() -> bool:
                     all_present = False
                     break
             
-            if not all_present or current_dns != dns_servers_str: # If not all present or string differs (e.g. order)
+            if not all_present or current_dns != dns_servers_str:
                 parser.set("Resolve", "DNS", dns_servers_str)
                 changes_made = True
             
-            domains_setting = "~." # Use these DNS servers for all domains
+            domains_setting = "~."
             if parser.get("Resolve", "Domains", fallback="") != domains_setting:
                 parser.set("Resolve", "Domains", domains_setting)
                 changes_made = True
@@ -169,14 +137,14 @@ def _configure_dns() -> bool:
                 with open(temp_resolved_conf, 'w', encoding='utf-8') as f_write:
                     parser.write(f_write, space_around_delimiters=False)
                 
-                system_utils.run_command(["sudo", "cp", str(temp_resolved_conf), str(SYSTEMD_RESOLVED_CONF_PATH)], print_fn_info=con.print_info)
-                system_utils.run_command(["sudo", "chown", "root:systemd-resolve", str(SYSTEMD_RESOLVED_CONF_PATH)], print_fn_info=con.print_info) # Correct ownership
-                system_utils.run_command(["sudo", "chmod", "644", str(SYSTEMD_RESOLVED_CONF_PATH)], print_fn_info=con.print_info)
+                system_utils.run_command(["sudo", "cp", str(temp_resolved_conf), str(SYSTEMD_RESOLVED_CONF_PATH)], print_fn_info=con.print_info, logger=app_logger)
+                system_utils.run_command(["sudo", "chown", "root:systemd-resolve", str(SYSTEMD_RESOLVED_CONF_PATH)], print_fn_info=con.print_info, logger=app_logger)
+                system_utils.run_command(["sudo", "chmod", "644", str(SYSTEMD_RESOLVED_CONF_PATH)], print_fn_info=con.print_info, logger=app_logger)
                 temp_resolved_conf.unlink()
 
                 con.print_info("Restarting systemd-resolved to apply DNS changes...")
-                system_utils.run_command(["sudo", "systemctl", "restart", "systemd-resolved.service"], print_fn_info=con.print_info, print_fn_error=con.print_error)
-                system_utils.run_command(["sudo", "resolvectl", "flush-caches"], print_fn_info=con.print_info, print_fn_error=con.print_error) # Also flush caches
+                system_utils.run_command(["sudo", "systemctl", "restart", "systemd-resolved.service"], print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
+                system_utils.run_command(["sudo", "resolvectl", "flush-caches"], print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
                 con.print_success("systemd-resolved configuration updated for DNS.")
             else:
                  con.print_info(f"No changes required for systemd-resolved DNS configuration in {SYSTEMD_RESOLVED_CONF_PATH}.")
@@ -185,7 +153,6 @@ def _configure_dns() -> bool:
             con.print_error(f"Failed to configure systemd-resolved via {SYSTEMD_RESOLVED_CONF_PATH}: {e}")
             return False
     
-    # Fallback if systemd-resolved is not clearly active or configuration failed
     con.print_info(f"systemd-resolved not detected or configuration failed. Checking {RESOLV_CONF_PATH} for NetworkManager.")
     try:
         resolv_content_fallback = ""
@@ -199,9 +166,9 @@ def _configure_dns() -> bool:
             con.print_info(f"or using nmcli for your active connection(s). Example for 'Wired connection 1':")
             con.print_info(f"  sudo nmcli con mod \"Wired connection 1\" ipv4.dns \"{GOOGLE_DNS_IPV4[0]} {GOOGLE_DNS_IPV4[1]}\"")
             con.print_info(f"  sudo nmcli con mod \"Wired connection 1\" ipv6.dns \"{GOOGLE_DNS_IPV6[0]} {GOOGLE_DNS_IPV6[1]}\"")
-            con.print_info(f"  sudo nmcli con mod \"Wired connection 1\" ipv4.ignore-auto-dns yes ipv6.ignore-auto-dns yes") # Important
+            con.print_info(f"  sudo nmcli con mod \"Wired connection 1\" ipv4.ignore-auto-dns yes ipv6.ignore-auto-dns yes")
             con.print_info(f"  sudo nmcli con up \"Wired connection 1\"  # Reactivate to apply")
-            return True # Non-fatal, user informed to take manual action.
+            return True
     except Exception: pass 
 
     con.print_warning(f"Fallback: Attempting to directly append to {RESOLV_CONF_PATH} (might be overwritten by system).")
@@ -219,10 +186,8 @@ def _configure_dns() -> bool:
     
     if lines_to_add_to_resolv:
         try:
-            # Prepend new nameservers to give them priority if file is read top-down
             content_to_add = "\n".join(lines_to_add_to_resolv) + "\n"
-            if current_resolv_text_fallback: # If file had content, prepend to existing
-                 # Remove any existing Google DNS to avoid duplicates before prepending
+            if current_resolv_text_fallback:
                 cleaned_existing_content_lines = [
                     line for line in current_resolv_text_fallback.splitlines()
                     if not any(google_ip in line for google_ip in GOOGLE_DNS_IPV4 + GOOGLE_DNS_IPV6)
@@ -231,9 +196,8 @@ def _configure_dns() -> bool:
             else:
                 new_content = content_to_add
 
-            # Write the new content using sudo tee (overwrite)
             cmd_write_resolv = f"echo -e {shlex.quote(new_content.strip())} | sudo tee {shlex.quote(str(RESOLV_CONF_PATH))} > /dev/null"
-            system_utils.run_command(cmd_write_resolv, shell=True, check=True)
+            system_utils.run_command(cmd_write_resolv, shell=True, check=True, logger=app_logger)
             con.print_success(f"DNS entries updated in {RESOLV_CONF_PATH}. System may overwrite this if not using systemd-resolved.")
         except Exception as e_direct_write: 
             con.print_error(f"Failed to directly write to {RESOLV_CONF_PATH}: {e_direct_write}")
@@ -253,15 +217,19 @@ def _configure_dnf_performance() -> bool:
     settings_to_set = {
         "max_parallel_downloads": "10",
         "fastestmirror": "True",
-        "defaultyes": "True",    # Added
-        "keepcache": "True"      # Added
+        "defaultyes": "True",
+        "keepcache": "True"
     }
     
     parser = configparser.ConfigParser(comment_prefixes=('#'), allow_no_value=True, strict=False)
     changes_made = False
     try:
-        with open(DNF_CONF_PATH, 'r', encoding='utf-8') as f_read:
-            parser.read_file(f_read) 
+        # Reading with sudo cat as dnf.conf is root-owned
+        read_proc = system_utils.run_command(
+            ["sudo", "cat", str(DNF_CONF_PATH)], capture_output=True, check=True,
+            print_fn_info=con.print_info, logger=app_logger
+        )
+        parser.read_string(read_proc.stdout)
         
         if not parser.has_section("main"):
             parser.add_section("main")
@@ -278,9 +246,9 @@ def _configure_dnf_performance() -> bool:
             with open(temp_config_path, 'w', encoding='utf-8') as f_write:
                 parser.write(f_write, space_around_delimiters=False) 
             
-            system_utils.run_command(["sudo", "cp", str(temp_config_path), str(DNF_CONF_PATH)], print_fn_info=con.print_info, print_fn_error=con.print_error)
-            system_utils.run_command(["sudo", "chown", "root:root", str(DNF_CONF_PATH)], print_fn_info=con.print_info, print_fn_error=con.print_error)
-            system_utils.run_command(["sudo", "chmod", "644", str(DNF_CONF_PATH)], print_fn_info=con.print_info, print_fn_error=con.print_error)
+            system_utils.run_command(["sudo", "cp", str(temp_config_path), str(DNF_CONF_PATH)], print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
+            system_utils.run_command(["sudo", "chown", "root:root", str(DNF_CONF_PATH)], print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
+            system_utils.run_command(["sudo", "chmod", "644", str(DNF_CONF_PATH)], print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
             temp_config_path.unlink() 
             con.print_success("DNF configuration updated successfully.")
         else:
@@ -289,32 +257,30 @@ def _configure_dnf_performance() -> bool:
     except configparser.Error as e:
         con.print_error(f"Error parsing {DNF_CONF_PATH}: {e}. DNF config not updated.")
         return False
-    except IOError as e:
+    except IOError as e: # Though run_command for cat should handle this, good to keep.
         con.print_error(f"I/O error with DNF configuration: {e}. DNF config not updated.")
         return False
     except Exception as e:
         con.print_error(f"Failed to configure DNF: {e}")
-        # Attempt to clean up temp file if it exists
-        temp_file_to_check_on_error = Path(f"/tmp/dnf_conf_new_{os.getpid()}_{int(time.time())}.conf")
+        temp_file_to_check_on_error = Path(f"/tmp/dnf_conf_new_{os.getpid()}_{int(time.time())}.conf") # Ensure consistent naming
         if temp_file_to_check_on_error.exists():
             try:
                 temp_file_to_check_on_error.unlink()
             except OSError:
-                pass # Ignore if unlink fails during error handling
+                pass
         return False
 
 def _setup_rpm_fusion() -> bool:
     """Sets up RPM Fusion free and non-free repositories."""
     con.print_sub_step("Setting up RPM Fusion repositories...")
+    free_installed = False
+    nonfree_installed = False
     try:
-        # Check if already installed to be somewhat idempotent
-        # rpm -q returns 0 if all packages are found, 1 if any are not or other error.
-        # We check them individually to give more specific feedback if one is missing.
         free_installed = system_utils.run_command(
-            ["rpm", "-q", "rpmfusion-free-release"], capture_output=True, check=False
+            ["rpm", "-q", "rpmfusion-free-release"], capture_output=True, check=False, logger=app_logger, print_fn_info=None
         ).returncode == 0
         nonfree_installed = system_utils.run_command(
-            ["rpm", "-q", "rpmfusion-nonfree-release"], capture_output=True, check=False
+            ["rpm", "-q", "rpmfusion-nonfree-release"], capture_output=True, check=False, logger=app_logger, print_fn_info=None
         ).returncode == 0
 
         if free_installed and nonfree_installed:
@@ -329,13 +295,14 @@ def _setup_rpm_fusion() -> bool:
 
     except FileNotFoundError: 
         con.print_warning("'rpm' command not found. Cannot check for existing RPM Fusion. Proceeding with install attempt.")
-    # If CalledProcessError with check=False, it means the command ran but failed (e.g. rpm db issue).
-    # system_utils.run_command would log this. We proceed with install attempt.
+    except Exception as e:
+        con.print_warning(f"Error checking RPM Fusion status: {e}. Proceeding with install attempt.")
+
 
     try:
         fedora_version_proc = system_utils.run_command(
             "rpm -E %fedora", capture_output=True, shell=True, check=True,
-            print_fn_info=con.print_info, print_fn_error=con.print_error
+            print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger
         )
         fedora_version = fedora_version_proc.stdout.strip()
         if not fedora_version or not fedora_version.isdigit():
@@ -349,33 +316,26 @@ def _setup_rpm_fusion() -> bool:
         if not free_installed: packages_to_install_rpmfusion.append(rpm_fusion_free_url)
         if not nonfree_installed: packages_to_install_rpmfusion.append(rpm_fusion_nonfree_url)
 
-        if not packages_to_install_rpmfusion: # Should not happen if logic above is correct, but defensive
+        if not packages_to_install_rpmfusion:
             con.print_info("RPM Fusion repositories are already set up.")
             return True
 
-        cmd_install_rpmfusion = ["sudo", "dnf", "install", "-y"] + packages_to_install_rpmfusion
-        system_utils.run_command(
-            cmd_install_rpmfusion, capture_output=True,
-            print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step
-        )
-        con.print_success("RPM Fusion repositories enabled/updated.")
-        return True
-    except Exception: # Error already logged by run_command
+        if system_utils.install_dnf_packages(
+            packages_to_install_rpmfusion,
+            print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step,
+            logger=app_logger, capture_output=True # RPMs are usually quick
+        ):
+            con.print_success("RPM Fusion repositories enabled/updated.")
+            return True
+        else:
+            con.print_error("Failed to install RPM Fusion repositories.")
+            return False
+            
+    except Exception as e: 
+        con.print_error(f"An unexpected error occurred during RPM Fusion setup: {e}")
         return False
 
-def _update_system() -> bool:
-    """Updates all system packages using 'dnf upgrade'."""
-    con.print_sub_step("Updating system (sudo dnf upgrade -y)...")
-    try:
-        # This is a long-running command, capture_output=False lets output stream to console
-        system_utils.run_command(
-            ["sudo", "dnf", "upgrade", "-y"], capture_output=False, # Stream output
-            print_fn_info=con.print_info, print_fn_error=con.print_error
-        )
-        con.print_success("System updated successfully.")
-        return True
-    except Exception: # Error already logged by run_command
-        return False
+# _update_system is removed, system_utils.upgrade_system_dnf will be used
 
 def _setup_flatpak() -> bool:
     """Sets up the Flathub repository for Flatpak system-wide."""
@@ -383,13 +343,13 @@ def _setup_flatpak() -> bool:
     try:
         check_cmd = ["flatpak", "remotes", "--system"]
         remotes_process = system_utils.run_command(
-            check_cmd, capture_output=True, check=False, print_fn_info=con.print_info
+            check_cmd, capture_output=True, check=False, print_fn_info=con.print_info, logger=app_logger
         )
         
         flathub_found = False
         if remotes_process.returncode == 0 and remotes_process.stdout:
             for line in remotes_process.stdout.strip().splitlines():
-                if line.strip().startswith("flathub"): # Check if 'flathub' is listed as a remote name
+                if line.strip().startswith("flathub"):
                     flathub_found = True
                     break
         
@@ -404,7 +364,8 @@ def _setup_flatpak() -> bool:
         ]
         system_utils.run_command(
             cmd_add_flathub, capture_output=True, check=True,
-            print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step
+            print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step,
+            logger=app_logger
         )
         con.print_success("Flathub repository added for Flatpak (system-wide).")
         return True
@@ -427,13 +388,12 @@ def _set_hostname() -> bool:
     try:
         current_hostname_proc = system_utils.run_command(
             ["hostnamectl", "status", "--static"], capture_output=True, check=False, 
-            print_fn_info=con.print_info
+            print_fn_info=con.print_info, logger=app_logger
         )
-        if current_hostname_proc.returncode != 0: # hostnamectl failed or not present
-            # Fallback to 'hostname' command
+        if current_hostname_proc.returncode != 0:
             current_hostname_proc = system_utils.run_command(
                 ["hostname"], capture_output=True, check=True, 
-                print_fn_info=con.print_info
+                print_fn_info=con.print_info, logger=app_logger
             )
         current_hostname = current_hostname_proc.stdout.strip()
         con.print_info(f"Current hostname: {current_hostname}")
@@ -451,7 +411,7 @@ def _set_hostname() -> bool:
             if new_hostname != current_hostname:
                 system_utils.run_command(
                     ["sudo", "hostnamectl", "set-hostname", new_hostname],
-                    print_fn_info=con.print_info, print_fn_error=con.print_error
+                    print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger
                 )
                 con.print_success(f"Hostname changed to '{new_hostname}'. A reboot might be needed for all services to see the change.")
             else:
@@ -462,7 +422,7 @@ def _set_hostname() -> bool:
     except FileNotFoundError: 
         con.print_error("'hostnamectl' or 'hostname' command not found. Cannot set hostname.")
         return False
-    except Exception: # Other errors, already logged by run_command
+    except Exception: 
         return False
 
 # --- Main Phase Function ---
@@ -473,16 +433,24 @@ def run_phase1(app_config: dict) -> bool:
     critical_success = True 
     
     phase1_config_data = config_loader.get_phase_data(app_config, "phase1_system_preparation")
+    dnf_packages_for_phase1 = phase1_config_data.get("dnf_packages", [])
 
-    # Task sequence:
     con.print_info("Step 1: Installing core packages for Phase 1 (e.g., dnf5, flatpak if specified)...")
-    if not _install_phase_packages(phase1_config_data):
-        con.print_error("Failed to install core DNF packages for Phase 1. This is critical.")
-        critical_success = False
+    if dnf_packages_for_phase1:
+        if not system_utils.install_dnf_packages(
+            dnf_packages_for_phase1,
+            print_fn_info=con.print_info, print_fn_error=con.print_error,
+            print_fn_sub_step=con.print_sub_step, logger=app_logger
+        ):
+            con.print_error("Failed to install core DNF packages for Phase 1. This is critical.")
+            critical_success = False
+    else:
+        con.print_info("No DNF packages specified for this sub-phase.")
+
 
     if critical_success: 
         con.print_info("Step 2: Configuring DNF performance and behavior...")
-        if not _configure_dnf_performance(): # Updated with new settings
+        if not _configure_dnf_performance():
             con.print_warning("DNF configuration encountered issues. Continuing...")
 
         con.print_info("Step 3: Setting up RPM Fusion repositories...")
@@ -494,27 +462,25 @@ def run_phase1(app_config: dict) -> bool:
         con.print_info("Step 4: Configuring DNS...")
         if not _configure_dns():
             con.print_error("DNS configuration encountered issues. Network operations might fail or be slow.")
-            critical_success = False # DNS is fairly critical
+            critical_success = False 
 
     if critical_success: 
         con.print_info("Step 5: Cleaning DNF metadata and updating system...")
-        try:
-            system_utils.run_command(
-                ["sudo", "dnf", "clean", "all"], capture_output=True,
-                print_fn_info=con.print_info, print_fn_error=con.print_error
-            )
-        except Exception as e: # Error already logged
-            con.print_warning(f"DNF clean all failed: {e}. Proceeding with upgrade attempt.")
+        if not system_utils.clean_dnf_cache(
+            print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger
+        ):
+            con.print_warning("DNF clean all failed. Proceeding with upgrade attempt.")
 
-        if not _update_system():
+        if not system_utils.upgrade_system_dnf(
+            print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger
+            # capture_output=False is default in upgrade_system_dnf
+        ):
             con.print_error("CRITICAL: System update failed. Subsequent phases may be unstable.")
             critical_success = False
     
-    # These are less critical for the system's core operation but important for user setup
     con.print_info("Step 6: Setting up Flathub repository for Flatpak...")
     if not _setup_flatpak():
         con.print_warning("Flatpak (Flathub) setup encountered issues. This may affect Flatpak app installations in later phases.")
-        # Not marking critical_success = False, but it's a significant warning.
 
     con.print_info("Step 7: Setting system hostname...")
     if not _set_hostname():
