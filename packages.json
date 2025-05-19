@@ -47,9 +47,6 @@
       "gnome-tweaks",
       "gnome-shell-extension-common"
     ],
-    "pip_packages": [
-      "gnome-extensions-cli"
-    ],
     "flatpak_apps": {
       "com.mattjakeman.ExtensionManager": "GNOME Extension Manager"
     },
