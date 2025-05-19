@@ -521,18 +521,6 @@ def run_phase3(app_config: dict) -> bool:
 
     # Proceed with plugins ONLY IF OMZ base AND its custom directory exist
     if omz_base_dir_exists and omz_custom_dir_exists:
-        omz_custom_plugins_dir_cmd = "mkdir -p ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins"
-        try:
-            system_utils.run_command(
-                omz_custom_plugins_dir_cmd, run_as_user=target_user, shell=True,
-                logger=app_logger, print_fn_info=con.print_info, print_fn_error=con.print_error
-            )
-            app_logger.info(f"Ensured OMZ custom plugins subdirectory exists using: {omz_custom_plugins_dir_cmd}")
-        except Exception:
-            con.print_warning("Could not create Oh My Zsh custom plugins subdirectory. Plugin installations will likely fail.")
-            app_logger.warning("Failed to create OMZ custom plugins subdirectory.", exc_info=True)
-            overall_success = False 
-
         if overall_success: 
             for item_name, command_str in phase3_config_commands.items():
                 # ... (Plugin installation loop - remains the same)
