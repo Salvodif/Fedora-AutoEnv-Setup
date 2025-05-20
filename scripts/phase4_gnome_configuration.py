@@ -8,6 +8,7 @@ from pathlib import Path
 import tempfile 
 from typing import Optional, Dict, List
 import logging 
+import time # <<< IMPORT MISSING TIME MODULE
 
 # Adjust import path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -64,14 +65,8 @@ def _install_git_extension_direct_move(
     """
     name = ext_cfg.get("name", ext_key)
     git_url = ext_cfg.get("url")
-    # `build_command` is optional. If present, it's run in the cloned dir before moving.
     build_command = ext_cfg.get("build_command", "") 
-    # `extension_source_subdir` is optional. If specified, this subdirectory within the clone is what gets renamed/moved.
     extension_source_subdir_name = ext_cfg.get("extension_source_subdir", "") 
-    
-    # UUID is CRITICAL for the destination directory name.
-    # Use "uuid" key from config first, then "uuid_to_enable" as a fallback, 
-    # as "uuid" is more standard for identifying the extension itself.
     uuid = ext_cfg.get("uuid") or ext_cfg.get("uuid_to_enable") 
 
     if not git_url:
@@ -88,6 +83,7 @@ def _install_git_extension_direct_move(
     temp_clone_parent_dir_obj = None 
 
     try:
+        # Using time.time() here, ensure 'import time' is at the top of the file.
         temp_parent_dir_name = f"gnome_ext_clone_{ext_key}_{os.getpid()}_{int(time.time())}"
         user_cache_dir = target_user_home / ".cache"
         
@@ -149,7 +145,7 @@ def _install_git_extension_direct_move(
             system_utils.run_command(rm_old_dest_cmd, run_as_user=target_user, shell=True, check=True, print_fn_info=con.print_info, logger=app_logger)
 
         mkdir_parent_dest_cmd = f"mkdir -p {shlex.quote(str(final_extension_path.parent))}"
-        system_utils.run_command(mkdir_parent_dest_cmd, run_as_user=target_user, shell=True, check=True, print_fn_info=None, logger=app_logger) # Ensure parent exists silently
+        system_utils.run_command(mkdir_parent_dest_cmd, run_as_user=target_user, shell=True, check=True, print_fn_info=None, logger=app_logger) 
 
         mv_cmd = f"mv {shlex.quote(str(effective_source_path))} {shlex.quote(str(final_extension_path))}"
         con.print_info(f"Moving '{effective_source_path}' to '{final_extension_path}'...")
@@ -174,7 +170,7 @@ def _install_git_extension_direct_move(
 def _apply_gnome_setting( target_user: str, schema: str, key: str, value: str, setting_description: str ) -> bool:
     app_logger.info(f"Applying GSetting for user '{target_user}': {schema} {key} = {value} ({setting_description})")
     con.print_sub_step(f"Applying GSetting: {setting_description}...")
-    cmd_to_gsettings = f"gsettings set {shlex.quote(schema)} {shlex.quote(key)} {value}" # Value should be pre-quoted for gsettings if it's a string
+    cmd_to_gsettings = f"gsettings set {shlex.quote(schema)} {shlex.quote(key)} {value}"
     try:
         system_utils.run_command(f"dbus-run-session -- {cmd_to_gsettings}", run_as_user=target_user, shell=True, capture_output=True, check=True, print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
         con.print_success(f"GSetting '{setting_description}' applied successfully for user '{target_user}'."); return True
@@ -215,7 +211,6 @@ def run_phase4(app_config: dict) -> bool:
     # --- Step 1: Install support tools (DNF, Pip, Flatpak) ---
     con.print_info("\nStep 1: Installing support tools (git, build tools, optional utilities)...")
     dnf_packages = phase4_config.get("dnf_packages", [])
-    # Use "gnome_extensions" key from JSON for checking if git-core needs to be added
     if phase4_config.get("gnome_extensions") and "git-core" not in dnf_packages and "git" not in dnf_packages:
         app_logger.info("Adding 'git-core' to DNF packages as Git extensions are configured.")
         dnf_packages.append("git-core")
@@ -244,7 +239,6 @@ def run_phase4(app_config: dict) -> bool:
         return False 
 
     # --- Step 3: Install GNOME Shell Extensions directly from Git ---
-    # Using "gnome_extensions" as the key from your JSON file
     git_extensions_cfg = phase4_config.get("gnome_extensions", {}) 
     if git_extensions_cfg:
         con.print_info("\nStep 3: Installing GNOME Shell Extensions from Git by direct move...")
@@ -252,10 +246,9 @@ def run_phase4(app_config: dict) -> bool:
         for ext_key, ext_val_cfg in git_extensions_cfg.items():
             if not isinstance(ext_val_cfg, dict): 
                 app_logger.warning(f"Invalid config for Git ext '{ext_key}'. Skip."); con.print_warning(f"Invalid config Git ext '{ext_key}'."); all_ext_ok = False; continue
-            # Check if 'type' is 'git', if not, skip or handle differently
-            if ext_val_cfg.get("type") != "git":
-                app_logger.info(f"Skipping extension '{ext_key}' as its type is not 'git' (type: {ext_val_cfg.get('type')}). This script now only handles 'git' type via direct move.")
-                con.print_info(f"Skipping non-Git extension: {ext_val_cfg.get('name', ext_key)}")
+            if ext_val_cfg.get("type") != "git": # Process only "git" type extensions with this logic
+                app_logger.info(f"Skipping extension '{ext_key}' as its type is not 'git' (type: {ext_val_cfg.get('type')}). This method only handles 'git' type extensions.")
+                con.print_info(f"Skipping non-Git type extension: {ext_val_cfg.get('name', ext_key)}")
                 continue
             if not _install_git_extension_direct_move(ext_key, ext_val_cfg, target_user, target_user_home): 
                 all_ext_ok = False
