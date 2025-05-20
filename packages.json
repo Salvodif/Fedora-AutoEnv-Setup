@@ -11,6 +11,7 @@
       "git",
       "curl",
       "cargo",
+      "yarn",
       "python3",
       "python3-pip",
       "stow",
@@ -50,70 +51,68 @@
     "flatpak_apps": {
       "com.mattjakeman.ExtensionManager": "GNOME Extension Manager"
     },
-    "gnome_extensions": {
-      "quick-settings-tweaks": {
-        "type": "git",
-        "url": "https://github.com/qwreey/quick-settings-tweaks.git",
-        "name": "Quick Settings Tweaks",
-        "uuid_to_enable": "quick-settings-tweaks@qwreey",
-        "build_command": "cd quick-settings-tweaks; chmod +x install.sh; sh ./install.sh"
-      },
-      "just-perfection": {
-        "type": "git",
-        "url": "https://gitlab.gnome.org/jrahmatzadeh/just-perfection.git",
-        "name": "Just Perfection",
-        "uuid_to_enable": "just-perfection-desktop@just-perfection",
-        "build_command": "cd just-perfection; ./scripts/build.sh -i"
-      },
-      "rounded-window-corners": {
-        "type": "git",
-        "url": "https://github.com/yilozt/rounded-window-corners.git",
-        "name": "Rounded Window Corners",
-        "uuid_to_enable": "rounded-window-corners@yilozt",
-        "build_command": "cd rounded-window-corners; yarn install && yarn ext:install"
-      },
-      "dash-to-dock": {
-        "type": "git",
-        "url": "https://github.com/micheleg/dash-to-dock.git",
-        "name": "Dash to Dock",
-        "uuid_to_enable": "dash-to-dock@micxgx.gmail.com",
-        "build_command": "cd dash-to-dock; make -C dash-to-dock install"
-      },
-      "blur-my-shell": {
-        "type": "git",
-        "url": "https://github.com/aunetx/blur-my-shell.git",
-        "name": "Blur my Shell",
-        "uuid_to_enable": "blur-my-shell@aunetx",
-        "build_command": "cd blur-my-shell; make install"
-      },
-      "bluetooth-quick-connect": {
-        "type": "git",
-        "url": "https://github.com/bjarosze/gnome-bluetooth-quick-connect.git",
-        "name": "Bluetooth Quick Connect",
-        "uuid_to_enable": "bluetooth-quick-connect@bjarosze.gmail.com",
-        "build_command": "cd gnome-bluetooth-quick-connect; make install"
-      },
-      "clipboard-indicator": {
-        "type": "git",
-        "url": "https://github.com/Tudmotu/gnome-shell-extension-clipboard-indicator.git $HOME/.local/share/gnome-shell/extensions/clipboard-indicator@tudmotu.com",
-        "name": "Clipboard Indicator",
-        "uuid_to_enable": "clipboard-indicator@tudmotu.com",
-        "build_command": ""
-      },
-      "wireless-hid": {
-        "type": "git",
-        "url": "https://github.com/vchlum/wireless-hid.git",
-        "name": "Wireless HID",
-        "uuid_to_enable": "wireless-hid@chlumskyvaclav.gmail.com",
-        "build_command": "cd wireless-hid; make build; make install"
-      },
-      "logo-menu": {
-        "type": "git",
-        "url": "https://github.com/Aryan20/Logomenu.git",
-        "name": "Logo Menu",
-        "uuid_to_enable": "logomenu@aryan_k",
-        "build_command": "cd Logomenu:; make install"
-      }
+    "quick-settings-tweaks": {
+      "type": "git",
+      "url": "https://github.com/qwreey/quick-settings-tweaks.git",
+      "name": "Quick Settings Tweaks",
+      "uuid": "quick-settings-tweaks@qwreey",
+      "build_command": "chmod +x install.sh; sh ./install.sh"
+    },
+    "just-perfection": {
+      "type": "git",
+      "url": "https://gitlab.gnome.org/jrahmatzadeh/just-perfection.git",
+      "name": "Just Perfection",
+      "uuid": "just-perfection-desktop@just-perfection",
+      "build_command": "./scripts/build.sh -i"
+    },
+    "rounded-window-corners": {
+      "type": "git",
+      "url": "https://github.com/yilozt/rounded-window-corners.git",
+      "name": "Rounded Window Corners",
+      "uuid": "rounded-window-corners@yilozt",
+      "build_command": "yarn install && yarn ext:install"
+    },
+    "dash-to-dock": {
+      "type": "git",
+      "url": "https://github.com/micheleg/dash-to-dock.git",
+      "name": "Dash to Dock",
+      "uuid": "dash-to-dock@micxgx.gmail.com",
+      "build_command": "make install"
+    },
+    "blur-my-shell": {
+      "type": "git",
+      "url": "https://github.com/aunetx/blur-my-shell.git",
+      "name": "Blur my Shell",
+      "uuid": "blur-my-shell@aunetx",
+      "build_command": "make install"
+    },
+    "bluetooth-quick-connect": {
+      "type": "git",
+      "url": "https://github.com/bjarosze/gnome-bluetooth-quick-connect.git",
+      "name": "Bluetooth Quick Connect",
+      "uuid": "bluetooth-quick-connect@bjarosze.gmail.com",
+      "build_command": "make install"
+    },
+    "clipboard-indicator": {
+      "type": "git",
+      "url": "https://github.com/Tudmotu/gnome-shell-extension-clipboard-indicator.git",
+      "name": "Clipboard Indicator",
+      "uuid": "clipboard-indicator@tudmotu.com",
+      "build_command": ""
+    },
+    "wireless-hid": {
+      "type": "git",
+      "url": "https://github.com/vchlum/wireless-hid.git",
+      "name": "Wireless HID",
+      "uuid": "wireless-hid@chlumskyvaclav.gmail.com",
+      "build_command": "make build && make install"
+    },
+    "logo-menu": {
+      "type": "git",
+      "url": "https://github.com/Aryan20/Logomenu.git",
+      "name": "Logo Menu",
+      "uuid": "logomenu@aryan_k",
+      "build_command": "make install"
     }
   },
   "phase5_nvidia_installation": {
