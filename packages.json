@@ -55,7 +55,8 @@
         "type": "git",
         "url": "https://github.com/qwreey/quick-settings-tweaks.git",
         "name": "Quick Settings Tweaks",
-        "uuid_to_enable": "quick-settings-tweaks@qwreey"
+        "uuid_to_enable": "quick-settings-tweaks@qwreey",
+        "build_command": "chmod +x install.sh; sh ./install.sh"
       },
       "just-perfection": {
         "type": "git",
@@ -79,7 +80,8 @@
         "type": "git",
         "url": "https://github.com/aunetx/blur-my-shell.git",
         "name": "Blur my Shell",
-        "uuid_to_enable": "blur-my-shell@aunetx"
+        "uuid_to_enable": "blur-my-shell@aunetx",
+        "build_command": "make install"
       },
       "bluetooth-quick-connect": {
         "type": "git",
