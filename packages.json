@@ -51,16 +51,9 @@
       "com.mattjakeman.ExtensionManager": "GNOME Extension Manager"
     },
     "gnome_extensions": {
-      "user-themes": {
-        "type": "ego",
-        "uuid": "user-theme@gnome-shell-extensions.gcampax.github.com",
-        "name": "User Themes",
-        "numerical_id": "19"
-      },
       "quick-settings-tweaks": {
         "type": "git",
         "url": "https://github.com/qwreey/quick-settings-tweaks.git",
-        "install_script": "install.sh",
         "name": "Quick Settings Tweaks",
         "uuid_to_enable": "quick-settings-tweaks@qwreey"
       },
@@ -110,7 +103,7 @@
         "type": "git",
         "url": "https://github.com/Aryan20/Logomenu.git",
         "name": "Logo Menu",
-        "uuid": "logomenu@aryan_k"
+        "uuid_to_enable": "logomenu@aryan_k"
       }
     }
   },

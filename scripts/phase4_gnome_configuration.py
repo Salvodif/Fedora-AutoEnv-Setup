@@ -6,7 +6,7 @@ import os
 import shlex 
 from pathlib import Path
 from typing import Optional, Dict, List
-import logging # For type hinting Optional[logging.Logger]
+import logging 
 
 # Adjust import path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -16,143 +16,169 @@ from scripts import system_utils
 from scripts.logger_utils import app_logger 
 
 # --- Constants ---
-# GEXT_PYTHON_MODULE_CALL is no longer needed as gext is not used.
-USER_EXTENSIONS_PATH_PATTERN = ".local/share/gnome-shell/extensions" 
+USER_EXTENSIONS_BASE_DIR_REL_PATH = Path(".local/share/gnome-shell/extensions") # Relative to user's home
 
 # --- Helper Functions ---
 
-# _check_gext_usable_for_enable_disable is REMOVED
-
-def _check_extension_directory_exists(
-    target_user: str, 
-    target_user_home: Path, 
-    extension_uuid: str, # UUID of the extension to check
-    logger: Optional[logging.Logger] = None 
-) -> bool:
-    """
-    Checks if the directory for a given extension UUID exists in the user's extensions folder.
-    This is a crucial verification step after an extension's install script runs.
-    """
-    _log = logger or app_logger 
-    user_ext_dir = target_user_home / USER_EXTENSIONS_PATH_PATTERN / extension_uuid
+def _ensure_user_extensions_base_dir_exists(target_user: str, target_user_home: Path) -> bool:
+    """Ensures the base directory for user GNOME Shell extensions exists."""
+    user_extensions_path = target_user_home / USER_EXTENSIONS_BASE_DIR_REL_PATH
+    app_logger.info(f"Ensuring base GNOME Shell extension directory exists for user '{target_user}': {user_extensions_path}")
     
-    _log.debug(f"Verifying existence of extension directory (as user '{target_user}'): {user_ext_dir}")
-    check_cmd = f"test -d {shlex.quote(str(user_ext_dir))}"
+    # Check if it exists as the target_user
+    check_cmd = f"test -d {shlex.quote(str(user_extensions_path))}"
     try:
         proc = system_utils.run_command(
             check_cmd, run_as_user=target_user, shell=True,
-            capture_output=True, check=False, # We check returncode manually
-            print_fn_info=None, # Silent check
-            logger=_log
+            capture_output=True, check=False, print_fn_info=None, logger=app_logger
         )
-        if proc.returncode == 0: # 0 means directory exists
-            _log.info(f"Extension directory successfully verified: {user_ext_dir}")
+        if proc.returncode == 0:
+            app_logger.info(f"User extensions base directory already exists: {user_extensions_path}")
             return True
-        else: # Non-zero means directory not found or error in 'test -d'
-            _log.warning(f"Extension directory NOT found after install attempt: {user_ext_dir} ('test -d' exit code: {proc.returncode})")
-            return False
-    except Exception as e: # Catch any other errors during the check
-        _log.error(f"Error occurred while checking for extension directory {user_ext_dir}: {e}", exc_info=True)
+        
+        # Directory does not exist, attempt to create it
+        con.print_info(f"User extensions base directory not found. Creating: {user_extensions_path}")
+        mkdir_cmd = f"mkdir -p {shlex.quote(str(user_extensions_path))}"
+        system_utils.run_command(
+            mkdir_cmd, run_as_user=target_user, shell=True,
+            capture_output=True, check=True, print_fn_info=con.print_info, logger=app_logger
+        )
+        con.print_success(f"Successfully created user extensions base directory: {user_extensions_path}")
+        return True
+    except Exception as e:
+        con.print_error(f"Failed to ensure user extensions base directory exists at {user_extensions_path}: {e}")
+        app_logger.error(f"Error ensuring/creating extensions base dir for {target_user}: {e}", exc_info=True)
         return False
 
-def _install_git_extension( # Renamed from _install_and_enable_git_extension
+def _install_git_extension_direct_move(
     ext_key: str, 
     ext_cfg: Dict[str, any], 
     target_user: str,
     target_user_home: Path
 ) -> bool:
     """
-    Clones a GNOME Shell extension from Git and runs its install command (e.g., make install).
-    The extension's own install script is responsible for file placement and enabling.
-    Verifies directory creation if a UUID is provided.
+    Clones a GNOME Shell extension from Git, optionally runs a build command,
+    renames the cloned/built directory to the extension's UUID, and moves it
+    to the user's local extensions directory.
+    Enabling is NOT handled by this function.
     """
     name = ext_cfg.get("name", ext_key)
     git_url = ext_cfg.get("url")
-    install_command_from_config = ext_cfg.get("install_command", "make install") 
-    # UUID is primarily for directory verification post-install. Enabling is up to the extension's script.
-    extension_uuid_for_verification = ext_cfg.get("uuid_to_enable") or ext_cfg.get("uuid") 
+    # `build_command` is optional. If present, it's run in the cloned dir before moving.
+    # Examples: "make", "meson compile -C build" (if build output is in root after), "" (no build needed)
+    build_command = ext_cfg.get("build_command", "") 
+    # `extension_subdir` is optional. If specified, this subdirectory within the clone is what gets renamed/moved.
+    # If empty, the root of the clone is used.
+    extension_source_subdir = ext_cfg.get("extension_source_subdir", "") 
+    
+    # UUID is CRITICAL for the destination directory name.
+    uuid = ext_cfg.get("uuid_to_enable") or ext_cfg.get("uuid") 
 
     if not git_url:
-        con.print_error(f"Missing 'url' for Git-based extension '{name}'. Cannot install.")
-        app_logger.error(f"No git_url for Git extension '{name}'. Skipping."); return False
-    
-    if not extension_uuid_for_verification:
-        con.print_warning(f"No 'uuid' or 'uuid_to_enable' specified for Git extension '{name}'. The installation script will be run, but post-install directory verification will be skipped.")
-        app_logger.warning(f"No UUID for Git extension '{name}'. Cannot verify directory post-install.")
+        con.print_error(f"Missing 'url' for Git-based extension '{name}'."); return False
+    if not uuid:
+        con.print_error(f"Missing 'uuid' or 'uuid_to_enable' for Git-based extension '{name}'. Cannot determine destination directory name."); return False
 
-    app_logger.info(f"Processing Git-based extension '{name}' from URL '{git_url}' for user '{target_user}'.")
-    con.print_sub_step(f"Installing Git-based extension: {name} (Install cmd: '{install_command_from_config}')")
+    app_logger.info(f"Processing Git-based extension '{name}' (UUID: {uuid}) from URL '{git_url}' for user '{target_user}'.")
+    con.print_sub_step(f"Installing Git-based extension: {name} (UUID: {uuid})")
 
-    repo_name = Path(git_url).name.removesuffix(".git")
+    repo_name_default = Path(git_url).name.removesuffix(".git") # Default name of cloned directory
     
-    git_install_user_script = f"""
+    # Destination path for the extension
+    user_extensions_dir = target_user_home / USER_EXTENSIONS_BASE_DIR_REL_PATH
+    final_extension_path = user_extensions_dir / uuid # e.g., ~/.local/share/gnome-shell/extensions/my-uuid@author
+
+    # Shell script to be executed as the target_user
+    # This script handles cloning, optional building, renaming (implicitly via move target), and moving.
+    install_script_for_user = f"""
         set -e 
         PRETTY_NAME={shlex.quote(name)}
-        TMP_EXT_DIR=$(mktemp -d -p "{shlex.quote(str(target_user_home / '.cache'))}" "gnome_git_ext_{shlex.quote(ext_key)}_XXXXXX" 2>/dev/null || mktemp -d -t "gnome_git_ext_{shlex.quote(ext_key)}_XXXXXX")
-        trap 'echo "Cleaning up temporary directory $TMP_EXT_DIR for $PRETTY_NAME"; rm -rf "$TMP_EXT_DIR"' EXIT
+        GIT_URL={shlex.quote(git_url)}
+        CLONED_REPO_NAME_DEFAULT={shlex.quote(repo_name_default)}
+        BUILD_COMMAND="{build_command}" # Use double quotes to preserve empty string or command with spaces
+        EXTENSION_SOURCE_SUBDIR="{extension_source_subdir}" # Subdir within clone that is the actual extension
         
-        echo "Cloning extension '$PRETTY_NAME' into '$TMP_EXT_DIR' from URL: {git_url}"
-        git clone --depth=1 {shlex.quote(git_url)} "$TMP_EXT_DIR/{shlex.quote(repo_name)}"
+        FINAL_DESTINATION_PATH={shlex.quote(str(final_extension_path))}
         
-        cd "$TMP_EXT_DIR/{shlex.quote(repo_name)}"
-        echo "Current directory: $PWD. Preparing to install '$PRETTY_NAME' using configured command: '{install_command_from_config}'"
+        # Create a unique temporary directory for cloning
+        # Prefer user's .cache, fallback to system /tmp
+        TMP_CLONE_PARENT_DIR=$(mktemp -d -p "{shlex.quote(str(target_user_home / '.cache'))}" "gnome_ext_clone_{shlex.quote(ext_key)}_XXXXXX" 2>/dev/null || mktemp -d -t "gnome_ext_clone_{shlex.quote(ext_key)}_XXXXXX")
+        trap 'echo "Cleaning up temporary clone parent directory $TMP_CLONE_PARENT_DIR for $PRETTY_NAME"; rm -rf "$TMP_CLONE_PARENT_DIR"' EXIT
         
-        INSTALL_SCRIPT_PATH="{install_command_from_config}"
+        TMP_CLONE_PATH="$TMP_CLONE_PARENT_DIR/$CLONED_REPO_NAME_DEFAULT"
         
-        if [[ "$INSTALL_SCRIPT_PATH" == *.sh ]] && [ -f "$INSTALL_SCRIPT_PATH" ]; then
-            echo "Making script '$INSTALL_SCRIPT_PATH' executable..."
-            chmod +x "$INSTALL_SCRIPT_PATH"
-            if [[ "$INSTALL_SCRIPT_PATH" != ./* && "$INSTALL_SCRIPT_PATH" != /* ]]; then
-                ACTUAL_INSTALL_EXEC_COMMAND="./$INSTALL_SCRIPT_PATH"
-            else
-                ACTUAL_INSTALL_EXEC_COMMAND="$INSTALL_SCRIPT_PATH"
-            fi
+        echo "Cloning extension '$PRETTY_NAME' into '$TMP_CLONE_PATH'..."
+        git clone --depth=1 "$GIT_URL" "$TMP_CLONE_PATH"
+        
+        cd "$TMP_CLONE_PATH"
+        echo "Current directory: $PWD"
+        
+        if [ -n "$BUILD_COMMAND" ]; then
+            echo "Running build command for '$PRETTY_NAME': $BUILD_COMMAND"
+            # Execute the build command. Output will be captured.
+            # Ensure build command can handle being run from the root of the clone.
+            eval $BUILD_COMMAND 
+            echo "Build command finished for '$PRETTY_NAME'."
         else
-            ACTUAL_INSTALL_EXEC_COMMAND="{install_command_from_config}" 
+            echo "No build command specified for '$PRETTY_NAME'."
+        fi
+
+        # Determine the actual source path of the extension files after clone/build
+        # This could be the root of the clone, or a subdirectory specified in config
+        EFFECTIVE_SOURCE_PATH="$TMP_CLONE_PATH" # Default to root of clone
+        if [ -n "$EXTENSION_SOURCE_SUBDIR" ]; then
+            EFFECTIVE_SOURCE_PATH="$TMP_CLONE_PATH/$EXTENSION_SOURCE_SUBDIR"
+            echo "Using specified subdirectory as extension source: '$EFFECTIVE_SOURCE_PATH'"
+            if [ ! -d "$EFFECTIVE_SOURCE_PATH" ]; then
+                echo "Error: Specified extension_source_subdir '$EXTENSION_SOURCE_SUBDIR' does not exist in cloned repo."
+                exit 1
+            fi
+        fi
+
+        # Before moving, ensure metadata.json exists in the source path (basic sanity check)
+        if [ ! -f "$EFFECTIVE_SOURCE_PATH/metadata.json" ]; then
+            echo "Error: 'metadata.json' not found in '$EFFECTIVE_SOURCE_PATH'. This does not appear to be a valid GNOME Shell extension directory."
+            echo "Please check the 'extension_source_subdir' configuration or the extension's build process."
+            exit 1
         fi
         
-        echo "Executing install command for '$PRETTY_NAME': $ACTUAL_INSTALL_EXEC_COMMAND"
-        $ACTUAL_INSTALL_EXEC_COMMAND
+        # Remove existing destination directory if it exists, to ensure a clean move/replace
+        if [ -d "$FINAL_DESTINATION_PATH" ]; then
+            echo "Removing existing extension directory at '$FINAL_DESTINATION_PATH'..."
+            rm -rf "$FINAL_DESTINATION_PATH"
+        fi
         
-        echo "Installation script/command for '$PRETTY_NAME' finished."
+        echo "Moving '$EFFECTIVE_SOURCE_PATH' to '$FINAL_DESTINATION_PATH'..."
+        # The `mv` command effectively renames the source to the UUID at the destination.
+        mkdir -p "$(dirname "$FINAL_DESTINATION_PATH")" # Ensure parent of FINAL_DESTINATION_PATH exists
+        mv "$EFFECTIVE_SOURCE_PATH" "$FINAL_DESTINATION_PATH"
+        
+        echo "Extension '$PRETTY_NAME' installed to '$FINAL_DESTINATION_PATH'."
+        # Trap will clean up $TMP_CLONE_PARENT_DIR which contains the original $TMP_CLONE_PATH (if not moved)
+        # or its parent if $EFFECTIVE_SOURCE_PATH was $TMP_CLONE_PATH.
     """
-    install_script_succeeded = False
+    
     try:
         system_utils.run_command(
-            git_install_user_script, run_as_user=target_user, shell=True, 
+            install_script_for_user, run_as_user=target_user, shell=True, 
             capture_output=True, check=True, 
             print_fn_info=con.print_info, print_fn_error=con.print_error,
             print_fn_sub_step=con.print_sub_step, logger=app_logger
         )
-        con.print_success(f"Installation script for Git-based extension '{name}' executed successfully.")
-        app_logger.info(f"Git extension '{name}' install script executed for {target_user}.")
-        install_script_succeeded = True
+        con.print_success(f"Extension '{name}' (UUID: {uuid}) installed successfully by direct move.")
+        app_logger.info(f"Git extension '{name}' (UUID: {uuid}) installed via clone, build (if any), and move for {target_user}.")
+        # No enabling step here, as per new requirement.
+        return True
     except subprocess.CalledProcessError as e:
-        app_logger.error(f"Failed to install Git-based extension '{name}' for user '{target_user}'. Install script failed. STDOUT:\n{e.stdout}\nSTDERR:\n{e.stderr}", exc_info=False)
-        # Error message already printed by run_command.
-        return False # Installation script failed
-    except Exception as e_unexp:
-        app_logger.error(f"Unexpected error during installation of Git-based extension '{name}' for user '{target_user}': {e_unexp}", exc_info=True)
+        # run_command's _p_error will print "Command failed: ..."
+        # Add more context here
+        con.print_error(f"Failed to install Git-based extension '{name}' (UUID: {uuid}). Script execution failed.")
+        app_logger.error(f"Install script for Git-based extension '{name}' (UUID: {uuid}) failed for user '{target_user}'.\nSTDOUT:\n{e.stdout}\nSTDERR:\n{e.stderr}", exc_info=False)
+        return False
+    except Exception as e_unexp: # Catch other unexpected Python errors
+        app_logger.error(f"Unexpected Python error during installation of Git-based extension '{name}' (UUID: {uuid}) for user '{target_user}': {e_unexp}", exc_info=True)
         con.print_error(f"Unexpected error installing Git-based extension '{name}'.")
         return False
-
-    # If install script succeeded and we have a UUID, verify directory.
-    # Enabling is now up to the extension's script or manual action.
-    if install_script_succeeded and extension_uuid_for_verification:
-        if not _check_extension_directory_exists(target_user, target_user_home, extension_uuid_for_verification, logger=app_logger):
-            con.print_error(f"Install script for '{name}' (UUID: {extension_uuid_for_verification}) seemed to succeed, but its directory was NOT found in the user's extensions folder. The extension's install script might be faulty or did not install to the expected location (e.g., {target_user_home / USER_EXTENSIONS_PATH_PATTERN / extension_uuid_for_verification}).")
-            app_logger.error(f"Post-install check failed: Directory for {extension_uuid_for_verification} not found after git install of '{name}'.")
-            return False # Installation is considered failed if directory isn't there
-        else:
-            con.print_success(f"Extension '{name}' (UUID: {extension_uuid_for_verification}) directory verified after Git install. Enabling is up to the extension or user.")
-            app_logger.info(f"Extension '{name}' directory for UUID {extension_uuid_for_verification} verified. Enabling not handled by this script.")
-            return True # Successfully installed and verified
-    elif install_script_succeeded and not extension_uuid_for_verification:
-        con.print_success(f"Installation script for Git-based extension '{name}' executed. No UUID was provided for post-install directory verification.")
-        app_logger.info(f"Git extension '{name}' install script executed. No UUID for directory verification provided.")
-        return True # Install script itself was the goal and it succeeded
-    
-    return False # Should be reached if install_script_succeeded was false.
 
 def _apply_gnome_setting(
     target_user: str, schema: str, key: str, value: str, setting_description: str
@@ -172,12 +198,12 @@ def _apply_dark_mode(target_user: str) -> bool:
     if not color_scheme_success: app_logger.warning("Failed to set 'color-scheme' to 'prefer-dark'.")
     gtk_theme_success = _apply_gnome_setting(target_user, "org.gnome.desktop.interface", "gtk-theme", "'Adwaita-dark'", "Adwaita-dark GTK Theme")
     if not gtk_theme_success: app_logger.warning("Failed to set 'gtk-theme' to 'Adwaita-dark'.")
-    return color_scheme_success # Primary setting determines overall success of dark mode attempt
+    return color_scheme_success
 
 # --- Main Phase Function ---
 def run_phase4(app_config: dict) -> bool:
-    app_logger.info("Starting Phase 4: GNOME Configuration & Manual Extensions Install.")
-    con.print_step("PHASE 4: GNOME Configuration & Manual Extensions Install")
+    app_logger.info("Starting Phase 4: GNOME Configuration & Direct Git Extensions Install.")
+    con.print_step("PHASE 4: GNOME Configuration & Direct Git Extensions Install")
     overall_success = True
     
     phase4_config = config_loader.get_phase_data(app_config, "phase4_gnome_configuration")
@@ -198,66 +224,72 @@ def run_phase4(app_config: dict) -> bool:
     app_logger.info(f"Run GNOME configs for: {target_user} (Home: {target_user_home})"); con.print_info(f"Run GNOME configs for: [bold cyan]{target_user}[/bold cyan]")
 
     # --- Step 1: Install support tools (DNF, Pip, Flatpak) ---
-    # Note: gnome-extensions-cli is no longer a primary tool for this phase's extension installation.
-    # Users might still want it for their own management, so it can remain in config if desired.
     con.print_info("\nStep 1: Installing support tools (git, build tools, optional utilities)...")
     
     dnf_packages = phase4_config.get("dnf_packages", [])
-    if phase4_config.get("gnome_extensions_manual_git") and "git-core" not in dnf_packages and "git" not in dnf_packages:
+    # Ensure git (git-core) is included if Git extensions are planned
+    # Also ensure build tools like 'make' and 'gcc' might be needed. The user should add these to config.
+    if phase4_config.get("gnome_extensions_from_git") and "git-core" not in dnf_packages and "git" not in dnf_packages:
         app_logger.info("Adding 'git-core' to DNF packages as Git extensions are configured.")
         dnf_packages.append("git-core")
             
     if dnf_packages:
         if not system_utils.install_dnf_packages(dnf_packages, allow_erasing=True, print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step, logger=app_logger): 
-            overall_success = False; con.print_warning("DNF package installation encountered issues.")
-    else: app_logger.info("No DNF packages for Phase 4 tools."); con.print_info("No DNF packages for Phase 4 tools.")
+            overall_success = False; con.print_warning("DNF package installation encountered issues. Extension builds may fail if dependencies like 'make' or 'gcc' are missing.")
+    else: 
+        app_logger.info("No DNF packages specified for Phase 4 tools.")
+        con.print_info("No DNF packages specified (ensure git, build tools like 'make', 'gcc' are present if needed for extensions).")
 
+    # Pip packages are no longer strictly needed by this phase's core logic unless other tools are desired
     pip_user_packages = phase4_config.get("pip_packages_user", []) 
     if pip_user_packages:
         if not system_utils.install_pip_packages(pip_user_packages, user_only=True, target_user=target_user, print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step, logger=app_logger):
             overall_success = False; con.print_warning("User pip package installation encountered issues.")
     else: app_logger.info("No user pip packages for Phase 4 tools."); con.print_info("No user pip packages for Phase 4 tools.")
     
-    flatpak_apps = phase4_config.get("flatpak_apps", {})
-    if flatpak_apps: # e.g., GNOME Extension Manager for user convenience
+    flatpak_apps = phase4_config.get("flatpak_apps", {}) # e.g., Extension Manager for user's convenience
+    if flatpak_apps: 
         if not system_utils.install_flatpak_apps(apps_to_install=flatpak_apps, system_wide=True, print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step, logger=app_logger): 
             overall_success = False; con.print_warning("Flatpak app installation encountered issues.")
     else: app_logger.info("No Flatpak apps for Phase 4."); con.print_info("No Flatpak apps for Phase 4.")
 
-    # Step 2 is removed as gext verification is no longer a gating factor for extension installation.
-    # Enabling is now dependent on the extension's own script or manual action.
+    # --- Step 2: Ensure base extensions directory exists ---
+    con.print_info(f"\nStep 2: Ensuring GNOME Shell user extensions base directory exists (~/{USER_EXTENSIONS_BASE_DIR_REL_PATH})...")
+    if not _ensure_user_extensions_base_dir_exists(target_user, target_user_home):
+        con.print_error("CRITICAL: Could not create or verify the user's GNOME Shell extensions base directory. Cannot install extensions.")
+        app_logger.error(f"CRITICAL: Failed to ensure extensions base directory for {target_user}.")
+        return False # This is critical for placing extensions
 
-    # --- Step 2 (was 3): Install GNOME Shell Extensions from Git ---
-    # Renumbering step for clarity.
-    git_extensions_cfg = phase4_config.get("gnome_extensions_manual_git", {})
+    # --- Step 3: Install GNOME Shell Extensions directly from Git ---
+    # Assumes a config key like "gnome_extensions_from_git"
+    git_extensions_cfg = phase4_config.get("gnome_extensions_from_git", {})
     if git_extensions_cfg:
-        con.print_info("\nStep 2: Installing GNOME Shell Extensions from Git repositories...")
+        con.print_info("\nStep 3: Installing GNOME Shell Extensions from Git by direct move...")
         all_ext_ok = True
         for ext_key, ext_val_cfg in git_extensions_cfg.items():
             if not isinstance(ext_val_cfg, dict): 
                 app_logger.warning(f"Invalid config for Git ext '{ext_key}'. Skip."); con.print_warning(f"Invalid config Git ext '{ext_key}'."); all_ext_ok = False; continue
-            # gext_is_ready is no longer passed as gext is not used for enabling by this script.
-            if not _install_git_extension(ext_key, ext_val_cfg, target_user, target_user_home): 
-                all_ext_ok = False
+            if not _install_git_extension_direct_move(ext_key, ext_val_cfg, target_user, target_user_home): 
+                all_ext_ok = False # Individual extension installation failed
         if not all_ext_ok: overall_success = False; con.print_warning("One or more Git-based GNOME extensions had install issues.")
         else: con.print_success("All configured Git-based GNOME extensions processed.")
     else: 
-        app_logger.info("No Git-based GNOME extensions listed for Phase 4."); 
-        con.print_info("No Git-based GNOME extensions to install.")
+        app_logger.info("No Git-based GNOME extensions listed for direct installation in Phase 4."); 
+        con.print_info("No Git-based GNOME extensions to install via direct move.")
         
-    # --- Step 3 (was 4): Set Dark Mode ---
-    con.print_info("\nStep 3: Setting Dark Mode...")
+    # --- Step 4: Set Dark Mode ---
+    con.print_info("\nStep 4: Setting Dark Mode...")
     if phase4_config.get("set_dark_mode", True):
         if not _apply_dark_mode(target_user): app_logger.warning(f"Dark mode setting for '{target_user}' had issues.")
     else: app_logger.info("Dark mode setting disabled in Ph4 config."); con.print_info("Dark mode setting skipped.")
 
     # --- Final Summary ---
     if overall_success:
-        app_logger.info("Phase 4 (manual Git extensions) completed successfully."); 
-        con.print_success("Phase 4: GNOME Configuration & Manual Git Extensions Install completed successfully.")
+        app_logger.info("Phase 4 (Direct Git Extensions Install) completed successfully."); 
+        con.print_success("Phase 4: GNOME Configuration & Direct Git Extensions Install completed successfully.")
         con.print_warning("IMPORTANT: A logout/login or GNOME Shell restart (Alt+F2, type 'r', press Enter) "
-                          "is likely required for all changes to take full effect, especially for extensions.")
+                          "is likely required for all changes to take full effect, especially for newly installed/moved extensions.")
     else:
-        app_logger.error("Phase 4 (manual Git extensions) completed with errors."); 
-        con.print_error("Phase 4: GNOME Configuration & Manual Git Extensions Install completed with errors. Review logs.")
+        app_logger.error("Phase 4 (Direct Git Extensions Install) completed with errors."); 
+        con.print_error("Phase 4: GNOME Configuration & Direct Git Extensions Install completed with errors. Review logs.")
     return overall_success
