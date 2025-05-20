@@ -5,6 +5,7 @@ import sys
 import os
 import shlex 
 from pathlib import Path
+import tempfile # For creating temporary directories
 from typing import Optional, Dict, List
 import logging 
 
@@ -16,7 +17,7 @@ from scripts import system_utils
 from scripts.logger_utils import app_logger 
 
 # --- Constants ---
-USER_EXTENSIONS_BASE_DIR_REL_PATH = Path(".local/share/gnome-shell/extensions") # Relative to user's home
+USER_EXTENSIONS_BASE_DIR_REL_PATH = Path(".local/share/gnome-shell/extensions") 
 
 # --- Helper Functions ---
 
@@ -25,7 +26,6 @@ def _ensure_user_extensions_base_dir_exists(target_user: str, target_user_home: 
     user_extensions_path = target_user_home / USER_EXTENSIONS_BASE_DIR_REL_PATH
     app_logger.info(f"Ensuring base GNOME Shell extension directory exists for user '{target_user}': {user_extensions_path}")
     
-    # Check if it exists as the target_user
     check_cmd = f"test -d {shlex.quote(str(user_extensions_path))}"
     try:
         proc = system_utils.run_command(
@@ -36,7 +36,6 @@ def _ensure_user_extensions_base_dir_exists(target_user: str, target_user_home: 
             app_logger.info(f"User extensions base directory already exists: {user_extensions_path}")
             return True
         
-        # Directory does not exist, attempt to create it
         con.print_info(f"User extensions base directory not found. Creating: {user_extensions_path}")
         mkdir_cmd = f"mkdir -p {shlex.quote(str(user_extensions_path))}"
         system_utils.run_command(
@@ -57,132 +56,157 @@ def _install_git_extension_direct_move(
     target_user_home: Path
 ) -> bool:
     """
-    Clones a GNOME Shell extension from Git, optionally runs a build command,
-    renames the cloned/built directory to the extension's UUID, and moves it
-    to the user's local extensions directory.
-    Enabling is NOT handled by this function.
+    Clones a GNOME Shell extension from Git into a temporary directory,
+    optionally runs a build command within the clone,
+    then moves the relevant (sub)directory to the user's local extensions folder,
+    renaming it to the extension's UUID.
     """
     name = ext_cfg.get("name", ext_key)
     git_url = ext_cfg.get("url")
-    # `build_command` is optional. If present, it's run in the cloned dir before moving.
-    # Examples: "make", "meson compile -C build" (if build output is in root after), "" (no build needed)
     build_command = ext_cfg.get("build_command", "") 
-    # `extension_subdir` is optional. If specified, this subdirectory within the clone is what gets renamed/moved.
-    # If empty, the root of the clone is used.
-    extension_source_subdir = ext_cfg.get("extension_source_subdir", "") 
-    
-    # UUID is CRITICAL for the destination directory name.
+    extension_source_subdir_name = ext_cfg.get("extension_source_subdir", "") # Relative path within clone
     uuid = ext_cfg.get("uuid_to_enable") or ext_cfg.get("uuid") 
 
     if not git_url:
         con.print_error(f"Missing 'url' for Git-based extension '{name}'."); return False
     if not uuid:
-        con.print_error(f"Missing 'uuid' or 'uuid_to_enable' for Git-based extension '{name}'. Cannot determine destination directory name."); return False
+        con.print_error(f"Missing 'uuid'/'uuid_to_enable' for Git-based extension '{name}'. Cannot determine destination."); return False
 
-    app_logger.info(f"Processing Git-based extension '{name}' (UUID: {uuid}) from URL '{git_url}' for user '{target_user}'.")
+    app_logger.info(f"Installing Git-based extension '{name}' (UUID: {uuid}) from '{git_url}' for user '{target_user}'.")
     con.print_sub_step(f"Installing Git-based extension: {name} (UUID: {uuid})")
 
-    repo_name_default = Path(git_url).name.removesuffix(".git") # Default name of cloned directory
-    
-    # Destination path for the extension
-    user_extensions_dir = target_user_home / USER_EXTENSIONS_BASE_DIR_REL_PATH
-    final_extension_path = user_extensions_dir / uuid # e.g., ~/.local/share/gnome-shell/extensions/my-uuid@author
+    temp_clone_parent_dir_obj = None # To ensure it's cleaned up
 
-    # Shell script to be executed as the target_user
-    # This script handles cloning, optional building, renaming (implicitly via move target), and moving.
-    install_script_for_user = f"""
-        set -e 
-        PRETTY_NAME={shlex.quote(name)}
-        GIT_URL={shlex.quote(git_url)}
-        CLONED_REPO_NAME_DEFAULT={shlex.quote(repo_name_default)}
-        BUILD_COMMAND="{build_command}" # Use double quotes to preserve empty string or command with spaces
-        EXTENSION_SOURCE_SUBDIR="{extension_source_subdir}" # Subdir within clone that is the actual extension
-        
-        FINAL_DESTINATION_PATH={shlex.quote(str(final_extension_path))}
-        
-        # Create a unique temporary directory for cloning
-        # Prefer user's .cache, fallback to system /tmp
-        TMP_CLONE_PARENT_DIR=$(mktemp -d -p "{shlex.quote(str(target_user_home / '.cache'))}" "gnome_ext_clone_{shlex.quote(ext_key)}_XXXXXX" 2>/dev/null || mktemp -d -t "gnome_ext_clone_{shlex.quote(ext_key)}_XXXXXX")
-        trap 'echo "Cleaning up temporary clone parent directory $TMP_CLONE_PARENT_DIR for $PRETTY_NAME"; rm -rf "$TMP_CLONE_PARENT_DIR"' EXIT
-        
-        TMP_CLONE_PATH="$TMP_CLONE_PARENT_DIR/$CLONED_REPO_NAME_DEFAULT"
-        
-        echo "Cloning extension '$PRETTY_NAME' into '$TMP_CLONE_PATH'..."
-        git clone --depth=1 "$GIT_URL" "$TMP_CLONE_PATH"
-        
-        cd "$TMP_CLONE_PATH"
-        echo "Current directory: $PWD"
-        
-        if [ -n "$BUILD_COMMAND" ]; then
-            echo "Running build command for '$PRETTY_NAME': $BUILD_COMMAND"
-            # Execute the build command. Output will be captured.
-            # Ensure build command can handle being run from the root of the clone.
-            eval $BUILD_COMMAND 
-            echo "Build command finished for '$PRETTY_NAME'."
-        else
-            echo "No build command specified for '$PRETTY_NAME'."
-        fi
-
-        # Determine the actual source path of the extension files after clone/build
-        # This could be the root of the clone, or a subdirectory specified in config
-        EFFECTIVE_SOURCE_PATH="$TMP_CLONE_PATH" # Default to root of clone
-        if [ -n "$EXTENSION_SOURCE_SUBDIR" ]; then
-            EFFECTIVE_SOURCE_PATH="$TMP_CLONE_PATH/$EXTENSION_SOURCE_SUBDIR"
-            echo "Using specified subdirectory as extension source: '$EFFECTIVE_SOURCE_PATH'"
-            if [ ! -d "$EFFECTIVE_SOURCE_PATH" ]; then
-                echo "Error: Specified extension_source_subdir '$EXTENSION_SOURCE_SUBDIR' does not exist in cloned repo."
-                exit 1
-            fi
-        fi
-
-        # Before moving, ensure metadata.json exists in the source path (basic sanity check)
-        if [ ! -f "$EFFECTIVE_SOURCE_PATH/metadata.json" ]; then
-            echo "Error: 'metadata.json' not found in '$EFFECTIVE_SOURCE_PATH'. This does not appear to be a valid GNOME Shell extension directory."
-            echo "Please check the 'extension_source_subdir' configuration or the extension's build process."
-            exit 1
-        fi
-        
-        # Remove existing destination directory if it exists, to ensure a clean move/replace
-        if [ -d "$FINAL_DESTINATION_PATH" ]; then
-            echo "Removing existing extension directory at '$FINAL_DESTINATION_PATH'..."
-            rm -rf "$FINAL_DESTINATION_PATH"
-        fi
-        
-        echo "Moving '$EFFECTIVE_SOURCE_PATH' to '$FINAL_DESTINATION_PATH'..."
-        # The `mv` command effectively renames the source to the UUID at the destination.
-        mkdir -p "$(dirname "$FINAL_DESTINATION_PATH")" # Ensure parent of FINAL_DESTINATION_PATH exists
-        mv "$EFFECTIVE_SOURCE_PATH" "$FINAL_DESTINATION_PATH"
-        
-        echo "Extension '$PRETTY_NAME' installed to '$FINAL_DESTINATION_PATH'."
-        # Trap will clean up $TMP_CLONE_PARENT_DIR which contains the original $TMP_CLONE_PATH (if not moved)
-        # or its parent if $EFFECTIVE_SOURCE_PATH was $TMP_CLONE_PATH.
-    """
-    
     try:
-        system_utils.run_command(
-            install_script_for_user, run_as_user=target_user, shell=True, 
-            capture_output=True, check=True, 
-            print_fn_info=con.print_info, print_fn_error=con.print_error,
-            print_fn_sub_step=con.print_sub_step, logger=app_logger
-        )
-        con.print_success(f"Extension '{name}' (UUID: {uuid}) installed successfully by direct move.")
-        app_logger.info(f"Git extension '{name}' (UUID: {uuid}) installed via clone, build (if any), and move for {target_user}.")
-        # No enabling step here, as per new requirement.
-        return True
-    except subprocess.CalledProcessError as e:
-        # run_command's _p_error will print "Command failed: ..."
-        # Add more context here
-        con.print_error(f"Failed to install Git-based extension '{name}' (UUID: {uuid}). Script execution failed.")
-        app_logger.error(f"Install script for Git-based extension '{name}' (UUID: {uuid}) failed for user '{target_user}'.\nSTDOUT:\n{e.stdout}\nSTDERR:\n{e.stderr}", exc_info=False)
-        return False
-    except Exception as e_unexp: # Catch other unexpected Python errors
-        app_logger.error(f"Unexpected Python error during installation of Git-based extension '{name}' (UUID: {uuid}) for user '{target_user}': {e_unexp}", exc_info=True)
-        con.print_error(f"Unexpected error installing Git-based extension '{name}'.")
-        return False
+        # 1. Create a unique temporary parent directory for the clone.
+        # This helps in cleaning up everything related to this specific clone.
+        # Note: tempfile.mkdtemp creates it with restrictive permissions (700 for current user).
+        # If run_as_user needs to write into it, this script needs to be root OR permissions adjusted.
+        # For simplicity, let's assume this script runs as root, and target_user operations are via `sudo -u`.
+        # If the script is NOT root, target_user must be able to write into system's /tmp or its own .cache.
+        # Let's create the temp dir as the target_user to avoid permission issues.
+        
+        # Create a temporary directory name
+        temp_parent_dir_name = f"gnome_ext_clone_{ext_key}_{os.getpid()}_{int(time.time())}"
+        # Try creating in user's .cache first, then /tmp
+        user_cache_dir = target_user_home / ".cache"
+        
+        # Ensure user's .cache exists
+        mkdir_cache_cmd = f"mkdir -p {shlex.quote(str(user_cache_dir))}"
+        system_utils.run_command(mkdir_cache_cmd, run_as_user=target_user, shell=True, check=False, logger=app_logger, print_fn_info=None)
 
-def _apply_gnome_setting(
-    target_user: str, schema: str, key: str, value: str, setting_description: str
-) -> bool:
+        mktemp_cmd_user_cache = f"mktemp -d -p {shlex.quote(str(user_cache_dir))} {temp_parent_dir_name}_XXXXXX"
+        mktemp_cmd_tmp = f"mktemp -d -t {temp_parent_dir_name}_XXXXXX" # Fallback to system /tmp
+
+        temp_clone_parent_dir_str = ""
+        try:
+            proc = system_utils.run_command(mktemp_cmd_user_cache, run_as_user=target_user, shell=True, capture_output=True, check=True, logger=app_logger, print_fn_info=None)
+            temp_clone_parent_dir_str = proc.stdout.strip()
+        except Exception:
+            app_logger.warning(f"Failed to create temp dir in user's .cache, trying system /tmp for {name}.")
+            proc = system_utils.run_command(mktemp_cmd_tmp, run_as_user=target_user, shell=True, capture_output=True, check=True, logger=app_logger, print_fn_info=None)
+            temp_clone_parent_dir_str = proc.stdout.strip()
+        
+        if not temp_clone_parent_dir_str:
+            raise Exception("Failed to create any temporary directory.")
+            
+        temp_clone_parent_dir_obj = Path(temp_clone_parent_dir_str)
+        app_logger.info(f"Created temporary parent directory for clone: {temp_clone_parent_dir_obj}")
+
+        # Default name of the directory created by git clone
+        cloned_repo_dirname = Path(git_url).name.removesuffix(".git")
+        cloned_repo_path_in_temp = temp_clone_parent_dir_obj / cloned_repo_dirname
+
+        # 2. Clone the repository into the temporary directory
+        con.print_info(f"Cloning '{git_url}' into '{cloned_repo_path_in_temp}'...")
+        git_clone_cmd = ["git", "clone", "--depth=1", git_url, str(cloned_repo_path_in_temp)]
+        system_utils.run_command(git_clone_cmd, run_as_user=target_user, capture_output=True, check=True, print_fn_info=con.print_info, logger=app_logger)
+        app_logger.info(f"Successfully cloned {name} to {cloned_repo_path_in_temp}")
+
+        # 3. Optionally, run a build command inside the cloned repository
+        if build_command:
+            con.print_info(f"Running build command '{build_command}' for {name} in {cloned_repo_path_in_temp}...")
+            # The build_command string might contain multiple commands, use shell=True
+            system_utils.run_command(
+                build_command, 
+                cwd=str(cloned_repo_path_in_temp), # Execute in the cloned directory
+                run_as_user=target_user, 
+                shell=True, # Build commands often require a shell
+                capture_output=True, check=True, 
+                print_fn_info=con.print_info, 
+                print_fn_sub_step=con.print_sub_step, # Show build output summary
+                logger=app_logger
+            )
+            app_logger.info(f"Build command '{build_command}' completed for {name}.")
+        else:
+            app_logger.info(f"No build command specified for {name}.")
+
+        # 4. Determine the effective source path (root of clone or a specified subdirectory)
+        effective_source_path = cloned_repo_path_in_temp
+        if extension_source_subdir_name:
+            effective_source_path = cloned_repo_path_in_temp / extension_source_subdir_name
+            app_logger.info(f"Using subdirectory '{extension_source_subdir_name}' as effective source: {effective_source_path}")
+        
+        if not effective_source_path.is_dir(): # Check if this path (as seen by this script) exists
+             # Re-check as target_user if this script is root and target_user is different
+            check_dir_as_user_cmd = f"test -d {shlex.quote(str(effective_source_path))}"
+            dir_exists_as_user_proc = system_utils.run_command(check_dir_as_user_cmd, run_as_user=target_user, shell=True, check=False, capture_output=True, logger=app_logger, print_fn_info=None)
+            if dir_exists_as_user_proc.returncode != 0:
+                con.print_error(f"Effective source path '{effective_source_path}' does not exist or is not a directory after clone/build for extension '{name}'.")
+                app_logger.error(f"Effective source path {effective_source_path} invalid for {name}.")
+                return False
+        
+        # 5. Sanity check for metadata.json in the effective source path (as target_user)
+        metadata_check_cmd = f"test -f {shlex.quote(str(effective_source_path / 'metadata.json'))}"
+        metadata_exists_proc = system_utils.run_command(metadata_check_cmd, run_as_user=target_user, shell=True, check=False, capture_output=True, logger=app_logger, print_fn_info=None)
+        if metadata_exists_proc.returncode != 0:
+            con.print_error(f"'metadata.json' not found in '{effective_source_path}'. This does not appear to be a valid GNOME Shell extension directory. Check 'extension_source_subdir' or build process.")
+            app_logger.error(f"metadata.json not found in {effective_source_path} for {name}.")
+            return False
+
+        # 6. Prepare destination path
+        user_extensions_base_dir = target_user_home / USER_EXTENSIONS_BASE_DIR_REL_PATH
+        final_extension_path = user_extensions_base_dir / uuid # Destination dir name is the UUID
+
+        # 7. Remove existing destination directory if it exists (as target_user)
+        rm_old_dest_cmd = f"rm -rf {shlex.quote(str(final_extension_path))}"
+        # Check if it exists before trying to remove, to avoid error message if it doesn't.
+        check_old_dest_cmd = f"test -d {shlex.quote(str(final_extension_path))}"
+        old_dest_exists_proc = system_utils.run_command(check_old_dest_cmd, run_as_user=target_user, shell=True, check=False, capture_output=True, logger=app_logger, print_fn_info=None)
+        if old_dest_exists_proc.returncode == 0:
+            con.print_info(f"Removing existing extension directory at '{final_extension_path}'...")
+            system_utils.run_command(rm_old_dest_cmd, run_as_user=target_user, shell=True, check=True, print_fn_info=con.print_info, logger=app_logger)
+
+        # 8. Move the effective source path to the final destination (as target_user)
+        # This also renames the source directory to the UUID.
+        # Ensure parent of final_extension_path exists (should be handled by _ensure_user_extensions_base_dir_exists)
+        mv_cmd = f"mv {shlex.quote(str(effective_source_path))} {shlex.quote(str(final_extension_path))}"
+        con.print_info(f"Moving '{effective_source_path}' to '{final_extension_path}'...")
+        system_utils.run_command(mv_cmd, run_as_user=target_user, shell=True, check=True, print_fn_info=con.print_info, logger=app_logger)
+
+        con.print_success(f"Extension '{name}' (UUID: {uuid}) installed successfully to '{final_extension_path}'.")
+        app_logger.info(f"Git extension '{name}' (UUID: {uuid}) installed via direct move for {target_user}.")
+        return True
+
+    except Exception as e: # Catch any error during the process
+        con.print_error(f"Failed to install Git-based extension '{name}' (UUID: {uuid}). Error: {e}")
+        app_logger.error(f"Installation of Git-based extension '{name}' (UUID: {uuid}) failed for user '{target_user}'. Error: {e}", exc_info=True)
+        return False
+    finally:
+        # 9. Cleanup the temporary parent clone directory
+        if temp_clone_parent_dir_obj and temp_clone_parent_dir_obj.exists():
+            app_logger.info(f"Cleaning up temporary clone parent directory: {temp_clone_parent_dir_obj}")
+            # Run rm -rf as the user who created the temp dir (target_user)
+            cleanup_cmd = f"rm -rf {shlex.quote(str(temp_clone_parent_dir_obj))}"
+            try:
+                system_utils.run_command(cleanup_cmd, run_as_user=target_user, shell=True, check=False, # Best effort cleanup
+                                         print_fn_info=None, logger=app_logger) 
+            except Exception as e_cleanup:
+                app_logger.warning(f"Failed to clean up temporary directory {temp_clone_parent_dir_obj}: {e_cleanup}")
+
+
+def _apply_gnome_setting( target_user: str, schema: str, key: str, value: str, setting_description: str ) -> bool:
+    # ... (remains unchanged)
     app_logger.info(f"Applying GSetting for user '{target_user}': {schema} {key} = {value} ({setting_description})")
     con.print_sub_step(f"Applying GSetting: {setting_description}...")
     cmd_to_gsettings = f"gsettings set {shlex.quote(schema)} {shlex.quote(key)} {value}"
@@ -193,6 +217,7 @@ def _apply_gnome_setting(
     except Exception as e_unexp: app_logger.error(f"Unexpected error GSetting '{setting_description}': {e_unexp}", exc_info=True); con.print_error(f"Unexpected error GSetting '{setting_description}'."); return False
 
 def _apply_dark_mode(target_user: str) -> bool:
+    # ... (remains unchanged)
     app_logger.info(f"Setting dark mode for user '{target_user}'.")
     color_scheme_success = _apply_gnome_setting(target_user, "org.gnome.desktop.interface", "color-scheme", "'prefer-dark'", "Prefer Dark Appearance (color-scheme)")
     if not color_scheme_success: app_logger.warning("Failed to set 'color-scheme' to 'prefer-dark'.")
@@ -225,29 +250,22 @@ def run_phase4(app_config: dict) -> bool:
 
     # --- Step 1: Install support tools (DNF, Pip, Flatpak) ---
     con.print_info("\nStep 1: Installing support tools (git, build tools, optional utilities)...")
-    
     dnf_packages = phase4_config.get("dnf_packages", [])
-    # Ensure git (git-core) is included if Git extensions are planned
-    # Also ensure build tools like 'make' and 'gcc' might be needed. The user should add these to config.
     if phase4_config.get("gnome_extensions_from_git") and "git-core" not in dnf_packages and "git" not in dnf_packages:
         app_logger.info("Adding 'git-core' to DNF packages as Git extensions are configured.")
         dnf_packages.append("git-core")
-            
     if dnf_packages:
         if not system_utils.install_dnf_packages(dnf_packages, allow_erasing=True, print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step, logger=app_logger): 
-            overall_success = False; con.print_warning("DNF package installation encountered issues. Extension builds may fail if dependencies like 'make' or 'gcc' are missing.")
-    else: 
-        app_logger.info("No DNF packages specified for Phase 4 tools.")
-        con.print_info("No DNF packages specified (ensure git, build tools like 'make', 'gcc' are present if needed for extensions).")
+            overall_success = False; con.print_warning("DNF package installation encountered issues.")
+    else: app_logger.info("No DNF packages for Phase 4 tools."); con.print_info("No DNF packages for Phase 4 tools.")
 
-    # Pip packages are no longer strictly needed by this phase's core logic unless other tools are desired
     pip_user_packages = phase4_config.get("pip_packages_user", []) 
     if pip_user_packages:
         if not system_utils.install_pip_packages(pip_user_packages, user_only=True, target_user=target_user, print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step, logger=app_logger):
             overall_success = False; con.print_warning("User pip package installation encountered issues.")
     else: app_logger.info("No user pip packages for Phase 4 tools."); con.print_info("No user pip packages for Phase 4 tools.")
     
-    flatpak_apps = phase4_config.get("flatpak_apps", {}) # e.g., Extension Manager for user's convenience
+    flatpak_apps = phase4_config.get("flatpak_apps", {})
     if flatpak_apps: 
         if not system_utils.install_flatpak_apps(apps_to_install=flatpak_apps, system_wide=True, print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_sub_step=con.print_sub_step, logger=app_logger): 
             overall_success = False; con.print_warning("Flatpak app installation encountered issues.")
@@ -258,11 +276,10 @@ def run_phase4(app_config: dict) -> bool:
     if not _ensure_user_extensions_base_dir_exists(target_user, target_user_home):
         con.print_error("CRITICAL: Could not create or verify the user's GNOME Shell extensions base directory. Cannot install extensions.")
         app_logger.error(f"CRITICAL: Failed to ensure extensions base directory for {target_user}.")
-        return False # This is critical for placing extensions
+        return False 
 
     # --- Step 3: Install GNOME Shell Extensions directly from Git ---
-    # Assumes a config key like "gnome_extensions_from_git"
-    git_extensions_cfg = phase4_config.get("gnome_extensions_from_git", {})
+    git_extensions_cfg = phase4_config.get("gnome_extensions_from_git", {}) # Expecting this key in config
     if git_extensions_cfg:
         con.print_info("\nStep 3: Installing GNOME Shell Extensions from Git by direct move...")
         all_ext_ok = True
@@ -270,7 +287,7 @@ def run_phase4(app_config: dict) -> bool:
             if not isinstance(ext_val_cfg, dict): 
                 app_logger.warning(f"Invalid config for Git ext '{ext_key}'. Skip."); con.print_warning(f"Invalid config Git ext '{ext_key}'."); all_ext_ok = False; continue
             if not _install_git_extension_direct_move(ext_key, ext_val_cfg, target_user, target_user_home): 
-                all_ext_ok = False # Individual extension installation failed
+                all_ext_ok = False
         if not all_ext_ok: overall_success = False; con.print_warning("One or more Git-based GNOME extensions had install issues.")
         else: con.print_success("All configured Git-based GNOME extensions processed.")
     else: 
