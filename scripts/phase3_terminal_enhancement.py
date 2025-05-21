@@ -3,12 +3,12 @@
 import subprocess 
 import sys
 import os
-import shutil
+import shutil # For shutil.which
 import shlex 
 from pathlib import Path
 from typing import Optional, Dict 
 import time # For time.sleep and unique backup naming
-import logging # Added for Optional[logging.Logger] type hint
+import logging # Retained for type hints if direct logger use was needed
 
 # Adjust import path to reach parent directory for shared modules
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -18,32 +18,10 @@ from scripts import system_utils
 from scripts.logger_utils import app_logger 
 
 # --- Helper Functions ---
-# ... (Helper functions _get_user_shell, _check_zsh_installed, _ensure_shell_in_etc_shells, _set_default_shell, _get_user_home, _copy_config_file_to_user_home remain unchanged from the previous correct version)
-def _get_user_shell(username: str) -> Optional[str]:
-    """Gets the current login shell for a specified user using getent."""
-    app_logger.debug(f"Getting shell for user '{username}'.")
-    try:
-        process = system_utils.run_command(
-            ["getent", "passwd", username], 
-            capture_output=True, 
-            check=True, 
-            print_fn_info=None, 
-            logger=app_logger
-        )
-        shell_path = process.stdout.strip().split(":")[-1]
-        if not shell_path: 
-            con.print_warning(f"Could not determine shell for user '{username}' from getent output.")
-            app_logger.warning(f"Empty shell path from getent for user '{username}'.")
-            return None
-        return shell_path
-    except subprocess.CalledProcessError:
-        con.print_warning(f"Could not find user '{username}' via getent to determine shell.")
-        app_logger.warning(f"User '{username}' not found via getent (CalledProcessError).")
-        return None
-    except Exception as e: 
-        con.print_warning(f"Could not determine the current shell for user '{username}': {e}")
-        app_logger.error(f"Exception getting shell for user '{username}': {e}", exc_info=True)
-        return None
+# _get_user_shell was moved to system_utils.get_user_shell
+# _ensure_shell_in_etc_shells was moved to system_utils.ensure_shell_in_etc_shells
+# _set_default_shell was moved to system_utils.set_default_shell
+# _get_user_home was moved to system_utils.get_user_home_dir
 
 def _check_zsh_installed() -> Optional[str]:
     """
@@ -51,198 +29,52 @@ def _check_zsh_installed() -> Optional[str]:
     Prefers common paths like /usr/bin/zsh or /bin/zsh, then `which`.
     """
     app_logger.debug("Checking if Zsh is installed.")
-    common_paths = ["/usr/bin/zsh", "/bin/zsh"] 
-    for zsh_path_str in common_paths:
+    common_paths_to_check = ["/usr/bin/zsh", "/bin/zsh"] 
+    for zsh_path_str in common_paths_to_check:
         zsh_path_obj = Path(zsh_path_str)
         if zsh_path_obj.is_file() and os.access(zsh_path_obj, os.X_OK):
-            app_logger.info(f"Zsh found at {zsh_path_str}.")
+            app_logger.info(f"Zsh found at pre-defined common path: {zsh_path_str}.")
             return zsh_path_str
             
+    # Fallback to shutil.which if not found in common paths
     zsh_path_which = shutil.which("zsh")
     if zsh_path_which:
         app_logger.info(f"Zsh found via 'which' at {zsh_path_which}.") 
         return zsh_path_which
         
-    app_logger.info("Zsh not found by _check_zsh_installed.")
+    app_logger.info("Zsh not found by _check_zsh_installed (common paths or 'which' failed).")
     return None
-
-
-def _ensure_shell_in_etc_shells(shell_path: str, logger: Optional[logging.Logger] = None) -> bool:
-    """
-    Ensures the given shell_path is listed in /etc/shells.
-    Attempts to create /etc/shells if it doesn't exist and script is root.
-    Requires sudo privileges to modify /etc/shells.
-    """
-    _log = logger or app_logger
-    if not shell_path: 
-        con.print_error("Cannot ensure empty shell path in /etc/shells.")
-        _log.error("Empty shell_path passed to _ensure_shell_in_etc_shells.")
-        return False
-    
-    _log.info(f"Ensuring '{shell_path}' is in /etc/shells.")
-    etc_shells_path = Path("/etc/shells")
-    try:
-        if not etc_shells_path.is_file():
-            con.print_warning(f"File {etc_shells_path} not found.")
-            _log.warning(f"{etc_shells_path} not found.")
-            if os.geteuid() == 0: # If script is root, try to create it
-                try:
-                    con.print_info(f"Attempting to create {etc_shells_path} as root.")
-                    system_utils.run_command(f"sudo touch {shlex.quote(str(etc_shells_path))}", shell=True, logger=_log, print_fn_info=con.print_info)
-                    system_utils.run_command(["sudo", "chown", "root:root", str(etc_shells_path)], logger=_log, print_fn_info=con.print_info)
-                    system_utils.run_command(["sudo", "chmod", "644", str(etc_shells_path)], logger=_log, print_fn_info=con.print_info)
-                    _log.info(f"Created {etc_shells_path}.")
-                except Exception as e_create:
-                    con.print_error(f"Failed to create {etc_shells_path}: {e_create}")
-                    _log.error(f"Failed to create {etc_shells_path}: {e_create}")
-                    return False
-            else: # Not root and file doesn't exist, cannot proceed
-                con.print_error(f"Cannot create {etc_shells_path} without root privileges.")
-                return False
-
-        current_shells_content = ""
-        if os.geteuid() == 0:
-            try:
-                 cat_proc = system_utils.run_command(
-                    ["sudo", "cat", str(etc_shells_path)],
-                    capture_output=True, check=True, logger=_log, print_fn_info=None
-                 )
-                 current_shells_content = cat_proc.stdout
-            except Exception as e_cat: 
-                _log.warning(f"Reading {etc_shells_path} with `sudo cat` failed ({e_cat}). Attempting direct read (may fail due to permissions).")
-                if etc_shells_path.exists(): 
-                    current_shells_content = etc_shells_path.read_text(encoding='utf-8')
-                else:
-                    _log.error(f"{etc_shells_path} still not found after creation attempt. Cannot verify shells.")
-                    return False
-        else: 
-            current_shells_content = etc_shells_path.read_text(encoding='utf-8')
-
-        current_shells = [line.strip() for line in current_shells_content.splitlines() if line.strip() and not line.startswith('#')]
-
-        if shell_path in current_shells:
-            _log.info(f"'{shell_path}' already in {etc_shells_path}.")
-            return True
-        
-        con.print_info(f"Shell '{shell_path}' not found in {etc_shells_path}. Attempting to add it (requires sudo)...")
-        
-        quoted_shell_path = shlex.quote(shell_path)
-        append_cmd_str = f"echo {quoted_shell_path} | sudo tee -a {shlex.quote(str(etc_shells_path))} > /dev/null"
-
-        system_utils.run_command(
-            append_cmd_str,
-            shell=True, check=True,
-            print_fn_info=con.print_info, print_fn_error=con.print_error,
-            logger=_log
-        )
-
-        con.print_success(f"Successfully added '{shell_path}' to {etc_shells_path}.")
-        _log.info(f"Added '{shell_path}' to {etc_shells_path}.")
-        return True
-    except Exception as e: 
-        con.print_error(f"Failed to process /etc/shells for '{shell_path}': {e}")
-        _log.error(f"Error processing /etc/shells for '{shell_path}': {e}", exc_info=True)
-        return False
-
-
-def _set_default_shell(username: str, shell_path: str, logger: Optional[logging.Logger] = None) -> bool:
-    """Sets the default login shell for the specified user. Requires root privileges."""
-    _log = logger or app_logger
-    current_shell = _get_user_shell(username) 
-    if current_shell == shell_path:
-        con.print_info(f"Shell '{shell_path}' is already the default shell for user '{username}'.")
-        _log.info(f"'{shell_path}' is already default for '{username}'.")
-        return True
-
-    con.print_sub_step(f"Setting Zsh ('{shell_path}') as default shell for user '{username}'...")
-    _log.info(f"Setting '{shell_path}' as default for '{username}'.")
-    
-    if os.geteuid() != 0: 
-        con.print_error(f"Cannot change shell for user '{username}'. This script part must be run as root to use 'chsh -s'.")
-        _log.error(f"Cannot change shell for '{username}': not root for 'chsh -s'.")
-        return False
-
-    if not _ensure_shell_in_etc_shells(shell_path, logger=_log):
-        con.print_warning(f"Could not ensure '{shell_path}' is in /etc/shells. `chsh` might warn or fail.")
-    try:
-        system_utils.run_command(
-            ["sudo", "chsh", "-s", shell_path, username],
-            print_fn_info=con.print_info, 
-            print_fn_error=con.print_error,
-            logger=_log
-        )
-        
-        time.sleep(0.5) 
-        new_shell_check = _get_user_shell(username) 
-        
-        if new_shell_check == shell_path:
-            con.print_success(f"Successfully set Zsh as the default shell for '{username}'.")
-            _log.info(f"Successfully set Zsh for '{username}'.")
-            con.print_info("Note: The shell change will take effect upon the user's next login.")
-        else:
-            con.print_warning(f"chsh command executed to set shell to '{shell_path}' for '{username}'.")
-            con.print_warning(f"Verification via getent currently shows shell as: '{new_shell_check or 'unknown'}'. This is sometimes delayed.")
-            _log.warning(f"chsh for '{username}' to '{shell_path}' ran, but getent shows '{new_shell_check}'. Shell change likely takes effect on next login.")
-            con.print_info("Please verify the shell after the user's next login.")
-        
-        return True 
-    except subprocess.CalledProcessError as e:
-        con.print_error(f"The 'chsh' command failed to set shell for '{username}'. Exit code: {e.returncode}")
-        if e.stderr: con.print_error(f"chsh STDERR: {e.stderr.strip()}")
-        _log.error(f"chsh command failed for '{username}' (CalledProcessError): {e}", exc_info=False)
-        return False
-    except Exception as e: 
-        con.print_error(f"An unexpected error occurred while trying to set default shell for '{username}': {e}")
-        _log.error(f"Unexpected error setting default shell for '{username}': {e}", exc_info=True)
-        return False
-
-
-def _get_user_home(username: str) -> Optional[Path]:
-    """Gets the home directory for the specified username."""
-    app_logger.debug(f"Getting home directory for user '{username}'.")
-    try:
-        proc = system_utils.run_command(
-            ["getent", "passwd", username], capture_output=True, check=True,
-            print_fn_info=None, 
-            logger=app_logger
-        )
-        home_dir_str = proc.stdout.strip().split(":")[5]
-        if not home_dir_str:
-            con.print_error(f"Could not determine home directory for user '{username}'.")
-            app_logger.error(f"Empty home directory from getent for '{username}'.")
-            return None
-        return Path(home_dir_str)
-    except Exception as e:
-        con.print_error(f"Error getting home directory for user '{username}': {e}")
-        app_logger.error(f"Exception getting home dir for '{username}': {e}", exc_info=True)
-        return None
 
 def _copy_config_file_to_user_home(
     source_filename: str,
-    source_subdir: str, 
+    source_subdir_in_project: str, # e.g., "zsh", "nano" relative to project root
     target_user: str,
     target_user_home: Path,
     project_root_dir: Path
 ) -> bool:
     """
-    Copies a configuration file from the project's config directory to the target user's home.
+    Copies a configuration file from the project's config directory (e.g., project_root/zsh/.zshrc)
+    to the target user's home directory (e.g., /home/user/.zshrc).
     Manages backup of existing files. Uses `run_as_user` for file operations in user's home.
     """
-    source_file_path = project_root_dir / source_subdir / source_filename
-    target_file_path = target_user_home / source_filename
-    app_logger.info(f"Copying '{source_filename}' from '{source_file_path}' to '{target_file_path}' for user '{target_user}'.")
+    source_file_path = project_root_dir / source_subdir_in_project / source_filename
+    # Target path is directly in user's home, e.g. /home/user/.zshrc, /home/user/.nanorc
+    target_file_path_in_user_home = target_user_home / source_filename 
+    
+    app_logger.info(f"Preparing to copy '{source_filename}' from project dir '{source_file_path}' to user home '{target_file_path_in_user_home}' for user '{target_user}'.")
 
     if not source_file_path.is_file():
-        con.print_warning(f"Source configuration file '{source_file_path}' not found. Skipping copy.")
-        app_logger.warning(f"Source file '{source_file_path}' not found. Skipping copy.")
+        con.print_warning(f"Source configuration file '{source_file_path}' not found. Skipping copy of '{source_filename}'.")
+        app_logger.warning(f"Source file '{source_file_path}' for '{source_filename}' not found. Skipping copy.")
         return False 
 
-    con.print_sub_step(f"Copying '{source_filename}' to {target_user}'s home directory ({target_file_path})...")
+    con.print_sub_step(f"Copying '{source_filename}' to {target_user}'s home directory ({target_file_path_in_user_home})...")
 
-    backup_command_str = ""
+    backup_command_for_user_shell = ""
     try:
+        test_exists_cmd = f"test -f {shlex.quote(str(target_file_path_in_user_home))}"
         test_exists_proc = system_utils.run_command(
-            f"test -f {shlex.quote(str(target_file_path))}",
+            test_exists_cmd,
             run_as_user=target_user, shell=True, check=False, capture_output=True,
             print_fn_info=None, 
             logger=app_logger
@@ -250,38 +82,45 @@ def _copy_config_file_to_user_home(
         target_exists_as_user = (test_exists_proc.returncode == 0)
         
         if target_exists_as_user:
-            timestamp_str = f"backup_{int(time.time())}_{Path.cwd().name.replace(' ','_')}"
-            backup_target_path_obj = target_user_home / f"{source_filename}.{timestamp_str}"
+            timestamp_str = f"backup_{Path.cwd().name.replace(' ','_')}_{int(time.time())}" # cwd().name provides project name context
+            backup_target_path_in_user_home = target_user_home / f"{source_filename}.{timestamp_str}"
             
-            backup_command_str = f"cp -pf {shlex.quote(str(target_file_path))} {shlex.quote(str(backup_target_path_obj))}"
-            con.print_info(f"Existing '{target_file_path.name}' found. Will attempt to back it up to '{backup_target_path_obj.name}'.")
-            app_logger.info(f"Target file '{target_file_path}' exists. Backup command (as user '{target_user}'): {backup_command_str}")
+            backup_command_for_user_shell = f"cp -pf {shlex.quote(str(target_file_path_in_user_home))} {shlex.quote(str(backup_target_path_in_user_home))}"
+            con.print_info(f"Existing '{target_file_path_in_user_home.name}' found. Will attempt to back it up to '{backup_target_path_in_user_home.name}' as user '{target_user}'.")
+            app_logger.info(f"Target file '{target_file_path_in_user_home}' exists. Backup command (as user '{target_user}'): {backup_command_for_user_shell}")
         else:
-            app_logger.info(f"Target file '{target_file_path}' does not exist. No backup needed for user '{target_user}'.")
+            app_logger.info(f"Target file '{target_file_path_in_user_home}' does not exist for user '{target_user}'. No backup needed.")
     except Exception as e_check: 
-        con.print_warning(f"Could not check for existing '{target_file_path.name}' for backup: {e_check}. Proceeding with copy.")
-        app_logger.warning(f"Error checking target file for backup: {e_check}", exc_info=True)
+        con.print_warning(f"Could not check for existing '{target_file_path_in_user_home.name}' for backup: {e_check}. Proceeding with copy attempt.")
+        app_logger.warning(f"Error checking target file '{target_file_path_in_user_home}' for backup: {e_check}", exc_info=True)
 
     try:
-        copy_command_str = f"cp -f {shlex.quote(str(source_file_path))} {shlex.quote(str(target_file_path))}"
+        # This command assumes the target_user (when run_as_user is invoked) has read access to source_file_path.
+        # If the script is run as root, sudo -u target_user cp <source_from_anywhere> <user_dest> works.
+        # If script is run as user_A and target_user is user_A, cp works.
+        # If script is user_A and target_user is user_B, this might fail if user_B cannot read source_file_path.
+        # For this project's typical use (run script as self, or as root targeting SUDO_USER), this is usually fine.
+        copy_command_for_user_shell = f"cp -f {shlex.quote(str(source_file_path))} {shlex.quote(str(target_file_path_in_user_home))}"
         
-        full_command_for_user = copy_command_str
-        if backup_command_str:
-            full_command_for_user = f"{backup_command_str} && {copy_command_str}"
+        full_command_for_user_shell = copy_command_for_user_shell
+        if backup_command_for_user_shell: # If backup is needed, chain commands
+            full_command_for_user_shell = f"{backup_command_for_user_shell} && {copy_command_for_user_shell}"
             
         system_utils.run_command(
-            full_command_for_user,
+            full_command_for_user_shell,
             run_as_user=target_user, 
-            shell=True, 
+            shell=True, # Commands are constructed for shell execution by the user
+            check=True, 
             print_fn_info=con.print_info, 
             print_fn_error=con.print_error,
             logger=app_logger
         )
-        con.print_success(f"Successfully copied '{source_filename}' to {target_user_home}.")
-        app_logger.info(f"Successfully copied '{source_filename}' to '{target_user_home}' as user '{target_user}'.")
+        con.print_success(f"Successfully copied '{source_filename}' to {target_file_path_in_user_home}.")
+        app_logger.info(f"Successfully copied '{source_filename}' to '{target_file_path_in_user_home}' as user '{target_user}'.")
         return True
     except Exception as e_copy: 
-        app_logger.error(f"Failed to copy '{source_filename}' to '{target_user_home}' (user: {target_user}): {e_copy}", exc_info=True)
+        # run_command will call con.print_error if check=True and command fails
+        app_logger.error(f"Failed to copy '{source_filename}' to '{target_file_path_in_user_home}' (user: {target_user}): {e_copy}", exc_info=True)
         return False
 
 # --- Main Phase Function ---
@@ -289,7 +128,7 @@ def _copy_config_file_to_user_home(
 def run_phase3(app_config: dict) -> bool:
     con.print_step("PHASE 3: Terminal Enhancement")
     app_logger.info("Starting Phase 3: Terminal Enhancement.")
-    overall_success = True # Assume success initially, set to False on critical errors
+    overall_success = True 
 
     target_user = system_utils.get_target_user(
         logger=app_logger, print_fn_info=con.print_info,
@@ -297,61 +136,75 @@ def run_phase3(app_config: dict) -> bool:
     )
     if not target_user:
         app_logger.error("Cannot determine target user for Phase 3. Aborting phase.")
-        return False # Critical failure
+        # con.print_error already called by get_target_user if it fails critically
+        return False 
 
-    target_user_home = _get_user_home(target_user)
+    target_user_home = system_utils.get_user_home_dir(target_user, logger=app_logger, print_fn_error=con.print_error)
     if not target_user_home: 
-        con.print_error(f"Cannot determine home directory for '{target_user}'. Aborting user-specific Phase 3 steps.")
+        # con.print_error already called by get_user_home_dir
         app_logger.error(f"Target user home for '{target_user}' not found. Aborting user-specific part of Phase 3.")
-        return False # Critical failure
+        return False 
 
-    con.print_info(f"Running terminal enhancements for user: [bold cyan]{target_user}[/bold cyan]")
-    app_logger.info(f"Running Phase 3 for user: {target_user}")
+    con.print_info(f"Running terminal enhancements for user: [bold cyan]{target_user}[/bold cyan] (Home: {target_user_home})")
+    app_logger.info(f"Running Phase 3 for user: {target_user}, Home: {target_user_home}")
 
     zsh_path = _check_zsh_installed()
-    current_shell = _get_user_shell(target_user) 
+    current_shell = system_utils.get_user_shell(target_user, logger=app_logger, print_fn_warning=con.print_warning)
     is_zsh_default = current_shell is not None and "zsh" in Path(current_shell).name.lower()
     
     phase2_config = config_loader.get_phase_data(app_config, "phase2_basic_configuration")
-    zsh_should_be_dnf_installed = False
-    if isinstance(phase2_config, dict):
-        zsh_should_be_dnf_installed = "zsh" in [pkg.lower() for pkg in phase2_config.get("dnf_packages", [])]
+    zsh_should_be_dnf_installed_in_phase2 = False
+    if isinstance(phase2_config, dict): # Check if phase2_config is valid
+        dnf_pkgs_ph2 = phase2_config.get("dnf_packages", [])
+        if isinstance(dnf_pkgs_ph2, list): # Ensure dnf_packages is a list
+            zsh_should_be_dnf_installed_in_phase2 = "zsh" in [str(pkg).lower() for pkg in dnf_pkgs_ph2]
 
-    user_wants_to_proceed_with_enhancements = True 
+    user_wants_to_proceed_with_zsh_enhancements = True 
 
     if not zsh_path:
-        if zsh_should_be_dnf_installed:
-            con.print_warning("Zsh was expected from Phase 2 DNF packages but is not currently found.")
+        if zsh_should_be_dnf_installed_in_phase2:
+            con.print_warning("Zsh was expected from Phase 2 DNF packages but is not currently found by this script.")
             con.print_info("This might mean Phase 2 failed, Zsh isn't in PATH, or it wasn't installed correctly.")
+            app_logger.warning("Zsh expected from Phase 2 DNF packages but not found by _check_zsh_installed().")
             if not con.confirm_action("Proceed with Zsh-specific terminal enhancements (Oh My Zsh, etc.)? (These may fail if Zsh is truly unavailable).", default=False):
-                user_wants_to_proceed_with_enhancements = False
+                user_wants_to_proceed_with_zsh_enhancements = False
         else: 
             con.print_warning("Zsh is not installed. It's highly recommended to add 'zsh' to Phase 2 DNF packages for Oh My Zsh.")
+            app_logger.warning("Zsh not found and not listed in Phase 2 DNF packages. Oh My Zsh installation will likely fail or try to install Zsh.")
             if not con.confirm_action("Zsh is not found. Do you want to attempt Oh My Zsh installation and other terminal enhancements? (OMZ might try to install Zsh or fail).", default=False):
-                user_wants_to_proceed_with_enhancements = False
-    elif not is_zsh_default:
+                user_wants_to_proceed_with_zsh_enhancements = False
+    elif not is_zsh_default: # Zsh is installed, but not default
         con.print_info(f"Zsh is installed ('{zsh_path}') but is not the default shell for '{target_user}'. Current shell: '{current_shell or 'Not set/Unknown'}'.")
-        if con.confirm_action(f"Set Zsh as default shell for '{target_user}' and proceed with enhancements?", default=True):
-            if not _set_default_shell(target_user, zsh_path, logger=app_logger): 
-                # _set_default_shell already prints errors.
-                # This is a significant issue for OMZ.
+        if con.confirm_action(f"Set Zsh as default shell for '{target_user}' and proceed with Zsh enhancements?", default=True):
+            if not system_utils.set_default_shell(
+                target_user, 
+                zsh_path, 
+                logger=app_logger, 
+                print_fn_info=con.print_info, 
+                print_fn_error=con.print_error,
+                print_fn_sub_step=con.print_sub_step,
+                print_fn_warning=con.print_warning,
+                print_fn_success=con.print_success
+            ): 
+                # system_utils.set_default_shell already prints errors.
                 con.print_error("CRITICAL: Failed to set Zsh as default. Oh My Zsh relies on Zsh being the login shell.")
-                app_logger.error(f"CRITICAL: Failed to set Zsh as default for {target_user}. Aborting Phase 3 Zsh enhancements.")
-                # Copy .nanorc as it's independent
+                app_logger.error(f"CRITICAL: Failed to set Zsh as default for {target_user}. Aborting Zsh-specific enhancements in Phase 3.")
+                # Still attempt to copy .nanorc as it's independent of Zsh
                 project_root_nano = Path(__file__).resolve().parent.parent
                 _copy_config_file_to_user_home(".nanorc", "nano", target_user, target_user_home, project_root_nano)
                 return False # Treat failure to set Zsh as default (when user wants it) as critical for OMZ part.
             else:
                 is_zsh_default = True # Assume success for the rest of this script run
+                app_logger.info(f"Zsh successfully set as default for {target_user} (pending next login for full effect).")
         else: # User chose not to set Zsh as default
-            user_wants_to_proceed_with_enhancements = False
+            user_wants_to_proceed_with_zsh_enhancements = False
             con.print_info("Zsh will not be set as default. Oh My Zsh and related enhancements will be skipped.")
             app_logger.info(f"User declined setting Zsh as default for '{target_user}'. OMZ enhancements skipped.")
 
 
-    if not user_wants_to_proceed_with_enhancements:
+    if not user_wants_to_proceed_with_zsh_enhancements:
         con.print_info("Skipping Zsh-specific terminal enhancements (including Oh My Zsh and plugins).")
-        app_logger.info("User opted out of Zsh-specific terminal enhancements or a prerequisite (like setting Zsh default) failed.")
+        app_logger.info("User opted out of Zsh-specific terminal enhancements or a prerequisite (like setting Zsh default) failed/was declined.")
         project_root_nano = Path(__file__).resolve().parent.parent
         _copy_config_file_to_user_home(".nanorc", "nano", target_user, target_user_home, project_root_nano)
         # If overall_success was already False due to _set_default_shell issue but user chose to skip,
@@ -365,7 +218,7 @@ def run_phase3(app_config: dict) -> bool:
     if not isinstance(phase3_config_data, dict): 
         con.print_warning("No valid configuration data (expected a dictionary) found for Phase 3. Skipping specific Oh My Zsh/plugin enhancements.")
         app_logger.warning("No Phase 3 configuration data (not a dict) found in config. Will only attempt dotfile copy if applicable.")
-        # If Zsh is default, still try to copy .zshrc
+        # If Zsh is default (or was made default), still try to copy .zshrc
         if zsh_path and is_zsh_default:
             project_root_zsh = Path(__file__).resolve().parent.parent
             _copy_config_file_to_user_home(".zshrc", "zsh", target_user, target_user_home, project_root_zsh)
@@ -373,27 +226,29 @@ def run_phase3(app_config: dict) -> bool:
         _copy_config_file_to_user_home(".nanorc", "nano", target_user, target_user_home, project_root_nano)
         return True # No specific OMZ config, but basic dotfiles might be copied.
 
-    phase3_config_commands = phase3_config_data.copy() 
+    # Make a mutable copy for pop
+    phase3_enhancement_commands = phase3_config_data.copy() 
     
     omz_install_key = "omz" 
-    omz_install_command_template = phase3_config_commands.pop(omz_install_key, None)
-    omz_installed_successfully_this_run = False # Tracks if OMZ *installer* ran successfully *now*
+    omz_install_command_template = phase3_enhancement_commands.pop(omz_install_key, None)
+    omz_installed_successfully_this_run = False 
     omz_base_dir_exists = False
-    omz_custom_dir_exists = False # $ZSH_CUSTOM, e.g., $HOME/.oh-my-zsh/custom
+    omz_custom_dir_exists = False 
 
     if omz_install_command_template:
         con.print_sub_step("Processing Oh My Zsh installation...")
         app_logger.info("Checking for existing Oh My Zsh installation before running installer.")
-        omz_base_path_check_cmd = "test -d $HOME/.oh-my-zsh" 
+        # Check for $HOME/.oh-my-zsh existence AS THE TARGET USER
+        omz_base_path_check_cmd = f"test -d {shlex.quote(str(target_user_home / '.oh-my-zsh'))}"
         try:
             omz_exists_proc = system_utils.run_command(
-                omz_base_path_check_cmd, run_as_user=target_user, shell=True,
+                omz_base_path_check_cmd, run_as_user=target_user, shell=True, # shell=True for test -d
                 check=False, capture_output=True, logger=app_logger, print_fn_info=None 
             )
             if omz_exists_proc.returncode == 0:
                 con.print_info("Oh My Zsh directory ($HOME/.oh-my-zsh) already exists. Skipping OMZ installation script.")
                 app_logger.info("OMZ directory $HOME/.oh-my-zsh exists, skipping installer.")
-                omz_base_dir_exists = True # It exists
+                omz_base_dir_exists = True 
             else: # OMZ base directory does not exist, proceed with installation
                 con.print_info("Oh My Zsh directory ($HOME/.oh-my-zsh) not found. Running Oh My Zsh installation script...")
                 con.print_panel(
@@ -405,50 +260,29 @@ def run_phase3(app_config: dict) -> bool:
                     title="Oh My Zsh Installation", style="yellow"
                 )
                 
-                omz_env_vars = {"RUNZSH": "no", "CHSH": "no"} 
+                omz_env_vars_for_installer = {"RUNZSH": "no", "CHSH": "no"} 
                 
-                # The OMZ command from config is usually like: "sh -c \"$(curl ...)\""
-                # We want to execute this string directly using bash -c
-                # The existing command: "sh -c '$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)'"
-                # To fix "sh: line 1: #!/bin/sh: No such file or directory", we can try ensuring the subshell invoked by bash -c
-                # directly executes the script content from curl, or make sure `sh` is callable.
-                # A more direct way: curl ... | sh (or bash)
-                # Let's try to make the original config command work by ensuring `sh` is in PATH or by using `bash` explicitly if `sh` causes issues.
-                # The error "sh: line 1: #!/bin/sh: No such file or directory" for the *inner* sh is odd if /bin/sh exists.
-                # It might be an issue with how the output of curl is being processed or if the curl command itself fails silently before sh -c.
-
-                # Simplification: try to pipe curl output directly to bash
-                # This requires `curl` to be installed. Add it as a dependency to phase1 or check here.
-                # Example: "curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | bash"
-                # However, the config has "sh -c '$(curl...)'". Let's make that robust.
-                # The issue might be that the 'sh -c' part *within* the string passed to 'bash -c' is the problem.
-                # The command from config: `omz_install_command_template`
-                # Original execution: `sudo -u user bash -c "CONFIG_COMMAND"`
-                # If CONFIG_COMMAND is "sh -c '$(curl...)'", then `bash -c` tries to run `sh`.
-                # The `#!/bin/sh` not found error (127) usually means the *interpreter* (`/bin/sh`) for the script downloaded by `curl`
-                # is not found or the script content itself is bad.
-                # Let's ensure `curl` is available.
-
-                curl_check = system_utils.run_command("command -v curl", run_as_user=target_user, shell=True, check=False, capture_output=True, logger=app_logger)
-                if curl_check.returncode != 0:
-                    con.print_error("`curl` command not found. Cannot download Oh My Zsh installer.")
-                    app_logger.error("`curl` not found for Oh My Zsh installation. Add `curl` to DNF packages.")
+                # Ensure curl is available (as target_user context)
+                curl_check_cmd = "command -v curl"
+                curl_check_proc = system_utils.run_command(curl_check_cmd, run_as_user=target_user, shell=True, check=False, capture_output=True, logger=app_logger, print_fn_info=None)
+                if curl_check_proc.returncode != 0:
+                    con.print_error("`curl` command not found in user's environment. Cannot download Oh My Zsh installer.")
+                    app_logger.error(f"`curl` not found for Oh My Zsh installation (user: {target_user}). Add `curl` to DNF packages.")
                     return False # Critical failure for OMZ install
 
-                # The original command in config is likely fine. The `127` error is puzzling if /bin/sh exists.
-                # Could be that `install.sh` itself has an issue when run this way, or some env var is missing.
-                # Let's stick to the configured command and log more if it fails.
+                # The command from config is usually "curl ... | bash" or "sh -c \"$(curl ...)\""
                 final_omz_command_from_config = str(omz_install_command_template)
                                 
+                # Run the OMZ installer command as the target user
                 system_utils.run_command(
                     final_omz_command_from_config,
                     run_as_user=target_user,
-                    shell=True, # The command from config likely requires a shell
-                    capture_output=False, 
-                    check=True, 
-                    env_vars=omz_env_vars, 
-                    print_fn_info=None, 
-                    print_fn_error=con.print_error, 
+                    shell=True, # The OMZ command from config often requires a shell (e.g., for pipelines or subshells)
+                    capture_output=False, # Stream OMZ installer output directly
+                    check=True, # Fail if OMZ installer script returns non-zero
+                    env_vars=omz_env_vars_for_installer, 
+                    print_fn_info=None, # Installer will print its own info
+                    print_fn_error=con.print_error, # Let run_command use Rich for errors
                     logger=app_logger
                 )
                 con.print_success("Oh My Zsh installation script finished successfully.")
@@ -458,23 +292,20 @@ def run_phase3(app_config: dict) -> bool:
                 con.print_warning("A new Zsh shell session (new terminal or re-login) is required for all OMZ changes to take full effect.")
         
         except subprocess.CalledProcessError as e_omz_script:
-            # Detailed error logging
-            con.print_error(f"Oh My Zsh installation script failed! Exit code: {e_omz_script.returncode}")
-            if e_omz_script.stdout: con.print_error(f"OMZ Installer STDOUT:\n{e_omz_script.stdout.strip()}") # Use ERROR level for output on failure
-            if e_omz_script.stderr: con.print_error(f"OMZ Installer STDERR:\n{e_omz_script.stderr.strip()}")
-            app_logger.error(f"OMZ installation script execution failed: {e_omz_script}", exc_info=False)
-            app_logger.error(f"Failed OMZ command was (as {target_user}, with RUNZSH/CHSH=no): {final_omz_command_from_config if 'final_omz_command_from_config' in locals() else omz_install_command_template}")
+            # run_command already logs and prints error message
+            app_logger.error(f"OMZ installation script execution failed for user '{target_user}'. Command: {e_omz_script.cmd}, Exit: {e_omz_script.returncode}", exc_info=False)
+            app_logger.error(f"Failed OMZ command (as {target_user}, with RUNZSH/CHSH=no): {final_omz_command_from_config if 'final_omz_command_from_config' in locals() else omz_install_command_template}")
             con.print_error("Oh My Zsh installation is CRITICAL for subsequent terminal enhancements. Aborting Phase 3.")
-            return False # CRITICAL FAILURE - terminate phase
+            return False 
 
         except Exception as e_unexpected_omz: 
             con.print_error(f"Oh My Zsh installation process encountered an unexpected error: {e_unexpected_omz}")
-            app_logger.error(f"OMZ installation - unexpected error: {e_unexpected_omz}", exc_info=True)
+            app_logger.error(f"OMZ installation - unexpected error for user '{target_user}': {e_unexpected_omz}", exc_info=True)
             con.print_error("Oh My Zsh installation is CRITICAL. Aborting Phase 3.")
-            return False # CRITICAL FAILURE - terminate phase
+            return False 
     
     else: # No OMZ install command in config, just check if $HOME/.oh-my-zsh exists
-        omz_base_path_check_cmd = "test -d $HOME/.oh-my-zsh"
+        omz_base_path_check_cmd = f"test -d {shlex.quote(str(target_user_home / '.oh-my-zsh'))}"
         omz_exists_proc = system_utils.run_command(
             omz_base_path_check_cmd, run_as_user=target_user, shell=True,
             check=False, capture_output=True, logger=app_logger, print_fn_info=None
@@ -491,151 +322,163 @@ def run_phase3(app_config: dict) -> bool:
             return True # Successfully completed what could be done without OMZ config.
 
 
-    # At this point, if omz_install_command_template was present, installer either succeeded or phase was aborted.
-    # If omz_install_command_template was NOT present, omz_base_dir_exists reflects current state.
-
     # Check for $ZSH_CUSTOM (e.g., $HOME/.oh-my-zsh/custom) IFF OMZ base dir exists
     if omz_base_dir_exists:
-        zsh_custom_check_cmd = "test -d ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}"
+        # Define ZSH_CUSTOM path explicitly based on user's home for the check
+        zsh_custom_path_abs = target_user_home / ".oh-my-zsh" / "custom"
+        zsh_custom_check_cmd = f"test -d {shlex.quote(str(zsh_custom_path_abs))}"
+        
         custom_exists_proc = system_utils.run_command(
-            zsh_custom_check_cmd, run_as_user=target_user, shell=True,
+            zsh_custom_check_cmd, run_as_user=target_user, shell=True, # shell=True for test -d
             check=False, capture_output=True, logger=app_logger, print_fn_info=None
         )
         if custom_exists_proc.returncode == 0:
             omz_custom_dir_exists = True
-            app_logger.info("OMZ custom directory (e.g., $HOME/.oh-my-zsh/custom) found.")
+            app_logger.info(f"OMZ custom directory ({zsh_custom_path_abs}) found for user '{target_user}'.")
         else:
-            app_logger.warning("OMZ custom directory (e.g., $HOME/.oh-my-zsh/custom) NOT found.")
-            if omz_installed_successfully_this_run: # If we just ran the installer and it "succeeded" but custom dir is missing
-                con.print_error("CRITICAL: Oh My Zsh installer seemed to finish, but its 'custom' directory is missing. This indicates a problem with OMZ setup. Aborting further OMZ enhancements.")
-                app_logger.error("CRITICAL: OMZ 'custom' directory missing after presumed successful install. Aborting OMZ enhancements.")
-                # We don't return False for the whole phase here, as OMZ base might exist, but plugins won't work.
-                # The main OMZ setup is the critical part. If that fails, the phase already returned False.
-                # If it "succeeded" but `custom` is missing, plugins are skipped.
-                overall_success = False # Mark that plugins part will fail/be skipped.
-            # If OMZ existed before and `custom` is missing, that's an existing user misconfiguration. We can't fix that.
-            # Plugins will be skipped.
-    else: # OMZ base dir does not exist (either install failed before this point, or was never there and not in config)
-        app_logger.info("OMZ base directory $HOME/.oh-my-zsh not found. Skipping plugin setup.")
-        # Dotfiles will still be copied at the end.
+            app_logger.warning(f"OMZ custom directory ({zsh_custom_path_abs}) NOT found for user '{target_user}'.")
+            if omz_installed_successfully_this_run: 
+                con.print_error(f"CRITICAL: Oh My Zsh installer seemed to finish, but its 'custom' directory ({zsh_custom_path_abs}) is missing. This indicates a problem with OMZ setup. Aborting further OMZ enhancements.")
+                app_logger.error(f"CRITICAL: OMZ 'custom' directory missing for {target_user} after presumed successful install. Aborting OMZ enhancements.")
+                overall_success = False 
+    else: 
+        app_logger.info("OMZ base directory $HOME/.oh-my-zsh not found for user. Skipping plugin setup.")
 
-    # Proceed with plugins ONLY IF OMZ base AND its custom directory exist
-    if omz_base_dir_exists and omz_custom_dir_exists:
-        if overall_success: 
-            for item_name, command_str in phase3_config_commands.items():
-                # ... (Plugin installation loop - remains the same)
-                app_logger.debug(f"Processing enhancement item: {item_name}, command: {command_str}")
-                if not isinstance(command_str, str) or not command_str.strip():
-                    con.print_warning(f"Skipping invalid command for item '{item_name}' (not a string or empty).")
-                    app_logger.warning(f"Invalid command for '{item_name}'.")
-                    continue
-                
-                con.print_sub_step(f"Processing: {item_name}")
-                
-                if "ZSH_CUSTOM:~" in command_str: 
-                    con.print_warning(f"Warning for '{item_name}': Command uses 'ZSH_CUSTOM:~'. Standard is 'ZSH_CUSTOM:-'. Ensure correct variable expansion.")
-                if item_name == "zsh-eza" and "plugins/you-should-use" in command_str: 
-                    con.print_warning(f"Warning for 'zsh-eza': Command might have an incorrect target directory '.../plugins/you-should-use'. Expected '.../plugins/zsh-eza'. Verify config.")
+    # Proceed with plugins ONLY IF OMZ base AND its custom directory exist AND overall_success is still true
+    if omz_base_dir_exists and omz_custom_dir_exists and overall_success:
+        for item_name, command_str_template in phase3_enhancement_commands.items():
+            app_logger.debug(f"Processing enhancement item: {item_name}, command template: {command_str_template}")
+            if not isinstance(command_str_template, str) or not command_str_template.strip():
+                con.print_warning(f"Skipping invalid command for item '{item_name}' (not a string or empty).")
+                app_logger.warning(f"Invalid command template for '{item_name}'.")
+                continue
+            
+            con.print_sub_step(f"Processing: {item_name}")
+            
+            # Substitute $HOME and ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}
+            # Note: ZSH_CUSTOM default is $HOME/.oh-my-zsh/custom. We use the absolute path.
+            # OMZ itself sets $ZSH_CUSTOM. If it's not set, this default is used by OMZ.
+            # For robustness, we can define what $ZSH_CUSTOM should be for our script's context.
+            # If we are here, omz_custom_dir_exists is true, meaning $HOME/.oh-my-zsh/custom exists.
+            # So, use target_user_home / ".oh-my-zsh" / "custom" for ZSH_CUSTOM.
+            
+            # Correctly define paths for substitution
+            home_dir_str_for_sub = str(target_user_home)
+            zsh_custom_dir_str_for_sub = str(target_user_home / ".oh-my-zsh" / "custom")
 
-                is_git_clone_cmd = "git clone" in command_str.lower()
-                should_skip_due_to_existence = False
-                if is_git_clone_cmd:
-                    try:
-                        cmd_parts = shlex.split(command_str)
-                        target_dir_in_cmd_unexpanded = ""
-                        if len(cmd_parts) > 0: 
-                            clone_idx = -1
-                            try: clone_idx = cmd_parts.index("clone")
-                            except ValueError: pass 
+            # Perform substitutions
+            command_str_processed = command_str_template.replace("$HOME", home_dir_str_for_sub)
+            command_str_processed = command_str_processed.replace("${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}", zsh_custom_dir_str_for_sub)
+            command_str_processed = command_str_processed.replace("$ZSH_CUSTOM", zsh_custom_dir_str_for_sub) # Also handle direct $ZSH_CUSTOM
 
-                            if clone_idx != -1 and len(cmd_parts) > clone_idx + 2: 
-                                potential_path_unexpanded = cmd_parts[clone_idx + 2]
-                                if not potential_path_unexpanded.startswith("-"): 
-                                    target_dir_in_cmd_unexpanded = potential_path_unexpanded
-                        
-                        if target_dir_in_cmd_unexpanded:
-                            expanded_target_dir_cmd = f"echo {target_dir_in_cmd_unexpanded}"
-                            path_expansion_proc = system_utils.run_command(
-                                expanded_target_dir_cmd, run_as_user=target_user, shell=True,
-                                capture_output=True, check=True, print_fn_info=None, logger=app_logger
-                            )
-                            expanded_target_dir_str = path_expansion_proc.stdout.strip()
+            if "ZSH_CUSTOM:~" in command_str_template: # Original template check
+                con.print_warning(f"Warning for '{item_name}': Original command template uses 'ZSH_CUSTOM:~'. This script substitutes with absolute custom path. Ensure command logic is compatible.")
+
+            # Git clone target checking
+            is_git_clone_cmd = "git clone" in command_str_processed.lower()
+            should_skip_due_to_existence = False
+            if is_git_clone_cmd:
+                try:
+                    cmd_parts = shlex.split(command_str_processed)
+                    target_dir_in_cmd_unexpanded = "" # This was for unexpanded, now we use expanded_target_dir_str directly
+                    
+                    # Find the target directory of the git clone command
+                    # Assuming format: git clone <repo_url> <target_directory>
+                    clone_idx = -1
+                    try: clone_idx = cmd_parts.index("clone")
+                    except ValueError: pass 
+
+                    if clone_idx != -1 and len(cmd_parts) > clone_idx + 2: 
+                        # The part after <repo_url> is the potential target directory
+                        potential_target_path_str = cmd_parts[clone_idx + 2]
+                        if not potential_target_path_str.startswith("-"): # Not an option like --depth
+                             # The path is already expanded because command_str_processed has $HOME and $ZSH_CUSTOM substituted
+                            expanded_target_dir_str = potential_target_path_str
 
                             if expanded_target_dir_str:
                                 check_dir_exists_cmd = f"test -d {shlex.quote(expanded_target_dir_str)}"
-                                app_logger.debug(f"Checking plugin existence with command: {check_dir_exists_cmd}")
+                                app_logger.debug(f"Checking plugin existence for '{item_name}' with command (as {target_user}): {check_dir_exists_cmd}")
                                 proc = system_utils.run_command(
                                     check_dir_exists_cmd, run_as_user=target_user, shell=True, 
                                     capture_output=True, check=False, print_fn_info=None, logger=app_logger
                                 )
                                 if proc.returncode == 0: 
                                     con.print_info(f"Destination for '{item_name}' ('{expanded_target_dir_str}') seems to exist. Skipping git clone.")
-                                    app_logger.info(f"Git clone for '{item_name}' skipped, dir '{expanded_target_dir_str}' likely exists.")
+                                    app_logger.info(f"Git clone for '{item_name}' skipped, dir '{expanded_target_dir_str}' likely exists for user '{target_user}'.")
                                     should_skip_due_to_existence = True
-                                elif proc.returncode != 1: 
-                                    con.print_warning(f"Could not reliably check existence for '{item_name}' (test cmd error {proc.returncode}). Will attempt command.")
-                                    app_logger.warning(f"test -d for '{item_name}' (target: {expanded_target_dir_str}) errored: {proc.stderr.strip() if proc.stderr else 'N/A'}")
+                                elif proc.returncode != 1: # 1 means test evaluated to false (dir doesn't exist), other codes are errors
+                                    con.print_warning(f"Could not reliably check existence for '{item_name}' (target: '{expanded_target_dir_str}', test cmd error {proc.returncode}). Will attempt command.")
+                                    app_logger.warning(f"test -d for '{item_name}' (target: {expanded_target_dir_str}) errored as user '{target_user}': {proc.stderr.strip() if proc.stderr else 'N/A'}")
                             else: 
-                                app_logger.warning(f"Could not expand target directory '{target_dir_in_cmd_unexpanded}' for '{item_name}'. Will attempt command.")
-                    except Exception as e_parse_clone: 
-                        con.print_warning(f"Could not parse/check git clone target for '{item_name}': {e_parse_clone}. Will attempt command.")
-                        app_logger.warning(f"Exception parsing/checking git clone for '{item_name}': {e_parse_clone}", exc_info=True)
-                
-                if should_skip_due_to_existence:
-                    continue 
+                                app_logger.warning(f"Could not determine target directory for git clone of '{item_name}' from command '{command_str_processed}'. Will attempt command.")
+                except Exception as e_parse_clone: 
+                    con.print_warning(f"Could not parse/check git clone target for '{item_name}': {e_parse_clone}. Will attempt command.")
+                    app_logger.warning(f"Exception parsing/checking git clone for '{item_name}': {e_parse_clone}", exc_info=True)
+            
+            if should_skip_due_to_existence:
+                continue 
 
-                try:
-                    system_utils.run_command(
-                        command_str, run_as_user=target_user, shell=True, 
-                        capture_output=True, check=True, 
-                        print_fn_info=con.print_info, print_fn_error=con.print_error,
-                        print_fn_sub_step=con.print_sub_step, logger=app_logger
-                    )
-                    con.print_success(f"Applied: {item_name}")
-                    app_logger.info(f"Applied enhancement: {item_name}")
-                except subprocess.CalledProcessError as e_cmd:
-                    if is_git_clone_cmd and e_cmd.returncode == 128 and e_cmd.stderr and \
-                       ("already exists and is not an empty directory" in e_cmd.stderr.lower() or \
-                        ("destination path" in e_cmd.stderr.lower() and "already exists" in e_cmd.stderr.lower())):
-                        con.print_info(f"Git clone for '{item_name}' reported destination exists (stderr). Considered skipped.")
-                        app_logger.info(f"Git clone for '{item_name}' skipped (error 128, dir exists based on stderr).")
-                    else: 
-                        app_logger.error(f"Failed applying enhancement '{item_name}'. Exit: {e_cmd.returncode}, Stderr: {e_cmd.stderr.strip() if e_cmd.stderr else 'N/A'}", exc_info=False)
-                        overall_success = False # Mark as error for this specific plugin
-                except Exception as e_cmd_unexpected: 
-                    con.print_error(f"Unexpected error applying '{item_name}': {e_cmd_unexpected}")
-                    app_logger.error(f"Unexpected error for '{item_name}': {e_cmd_unexpected}", exc_info=True)
-                    overall_success = False # Mark as error
-    elif not (omz_base_dir_exists and omz_custom_dir_exists) : # If OMZ base or custom dir is missing
+            try:
+                system_utils.run_command(
+                    command_str_processed, # Use the processed command string
+                    run_as_user=target_user, 
+                    shell=True, # Many of these commands (curl | sh, cargo install, git clone) benefit from or require shell
+                    capture_output=True, # Capture for logging, run_command can show summaries
+                    check=True, 
+                    print_fn_info=con.print_info, # For "Executing..."
+                    print_fn_error=con.print_error,
+                    print_fn_sub_step=con.print_sub_step, # For STDOUT/STDERR summaries
+                    logger=app_logger
+                )
+                con.print_success(f"Applied: {item_name}")
+                app_logger.info(f"Applied enhancement '{item_name}' for user '{target_user}'.")
+            except subprocess.CalledProcessError as e_cmd:
+                # run_command already logs and prints a generic error.
+                # Add specific context here if needed.
+                if is_git_clone_cmd and e_cmd.returncode == 128 and e_cmd.stderr and \
+                   ("already exists and is not an empty directory" in e_cmd.stderr.lower() or \
+                    ("destination path" in e_cmd.stderr.lower() and "already exists" in e_cmd.stderr.lower())):
+                    con.print_info(f"Git clone for '{item_name}' reported destination exists (via stderr after attempt). Considered skipped.")
+                    app_logger.info(f"Git clone for '{item_name}' skipped (error 128, dir exists based on stderr) for user '{target_user}'.")
+                else: 
+                    app_logger.error(f"Failed applying enhancement '{item_name}' for user '{target_user}'. Command: '{e_cmd.cmd}', Exit: {e_cmd.returncode}, Stderr: {e_cmd.stderr.strip() if e_cmd.stderr else 'N/A'}", exc_info=False)
+                    overall_success = False 
+            except Exception as e_cmd_unexpected: 
+                con.print_error(f"Unexpected error applying '{item_name}': {e_cmd_unexpected}")
+                app_logger.error(f"Unexpected error for '{item_name}' for user '{target_user}': {e_cmd_unexpected}", exc_info=True)
+                overall_success = False 
+    elif not (omz_base_dir_exists and omz_custom_dir_exists) : 
         con.print_warning("Oh My Zsh base or custom directory not found/verified. Skipping OMZ plugin configuration.")
-        app_logger.warning("OMZ base or custom directory not found/verified. Skipping plugin config.")
+        app_logger.warning(f"OMZ base or custom directory not found/verified for user '{target_user}'. Skipping plugin config.")
 
 
-    # --- Dotfile Copying (always attempted if user wanted enhancements) ---
+    # --- Dotfile Copying (always attempted if user wanted Zsh enhancements initially, or if Zsh is default) ---
     project_root = Path(__file__).resolve().parent.parent
-    if user_wants_to_proceed_with_enhancements: # This was the initial gate for Zsh stuff
-        # Copy .zshrc if Zsh is installed and is_zsh_default is true (or was made true)
-        if zsh_path and is_zsh_default: 
-            if not _copy_config_file_to_user_home(".zshrc", "zsh", target_user, target_user_home, project_root):
-                con.print_warning("Failed to copy .zshrc. Your Zsh terminal might not use the custom configuration.")
-                app_logger.warning("Failed to copy .zshrc")
-                overall_success = False # Custom .zshrc is important
-        elif zsh_path: # Zsh installed but not default, but user wanted enhancements. Copy .zshrc anyway.
-            con.print_info("Zsh is installed but might not be default. .zshrc will be copied as enhancements were requested.")
-            if not _copy_config_file_to_user_home(".zshrc", "zsh", target_user, target_user_home, project_root):
-                overall_success = False
+    
+    # Copy .zshrc if Zsh is installed AND (it's the default OR the user explicitly wanted Zsh enhancements)
+    if zsh_path and (is_zsh_default or user_wants_to_proceed_with_zsh_enhancements): 
+        if not _copy_config_file_to_user_home(".zshrc", "zsh", target_user, target_user_home, project_root):
+            con.print_warning("Failed to copy .zshrc. Your Zsh terminal might not use the custom configuration.")
+            app_logger.warning(f"Failed to copy .zshrc for user '{target_user}'")
+            overall_success = False # Custom .zshrc is important for the Zsh experience
+    elif zsh_path and not is_zsh_default and not user_wants_to_proceed_with_zsh_enhancements:
+        app_logger.info(f"Zsh is installed but not default, and user skipped Zsh enhancements. Not copying .zshrc for {target_user}.")
+    elif not zsh_path:
+        app_logger.info(f"Zsh is not installed. Not copying .zshrc for {target_user}.")
+
     
     # Always attempt to copy .nanorc if home directory is valid
     if not _copy_config_file_to_user_home(".nanorc", "nano", target_user, target_user_home, project_root):
         con.print_warning("Failed to copy .nanorc.")
-        app_logger.warning("Failed to copy .nanorc")
-        # overall_success = False # Nanorc is less critical than .zshrc for terminal *enhancements*
-                
+        app_logger.warning(f"Failed to copy .nanorc for user '{target_user}'")
+        # overall_success = False # Nanorc is less critical than .zshrc for terminal *enhancements* phase success
+
+    # --- Phase Completion Summary ---
     if overall_success:
         con.print_success("Phase 3: Terminal Enhancement completed.")
-        app_logger.info("Phase 3 completed successfully.")
+        app_logger.info(f"Phase 3 completed successfully for user '{target_user}'.")
     else:
         con.print_error("Phase 3: Terminal Enhancement completed with errors. Please review the output and logs.")
-        app_logger.error("Phase 3 completed with errors.")
+        app_logger.error(f"Phase 3 completed with errors for user '{target_user}'.")
     
     return overall_success
