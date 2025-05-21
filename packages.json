@@ -36,6 +36,11 @@
     "flatpak_apps": {
       "com.usebottles.bottles": "Bottles for managing your wineprefixes on Linux",
       "com.github.tchx84.Flatseal":"Flatseal is a graphical utility to review and modify permissions from your Flatpak applications"
+    },
+    "nerd_fonts_to_install": {
+      "Hack": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/Hack.zip",
+      "FiraMono": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/FiraMono.zip",
+      "Meslo": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/Meslo.zip"
     }
   },
   "phase3_terminal_enhancement": {
@@ -74,13 +79,6 @@
         "uuid": "just-perfection-desktop@just-perfection",
         "build_command": "./scripts/build.sh -i"
       },
-      "rounded-window-corners": {
-        "type": "git",
-        "url": "https://github.com/yilozt/rounded-window-corners.git",
-        "name": "Rounded Window Corners",
-        "uuid": "rounded-window-corners@yilozt",
-        "build_command": "yarn install && yarn ext:install"
-      },
       "dash-to-dock": {
         "type": "git",
         "url": "https://github.com/micheleg/dash-to-dock.git",
@@ -115,13 +113,6 @@
         "name": "Wireless HID",
         "uuid": "wireless-hid@chlumskyvaclav.gmail.com",
         "build_command": "make build && make install"
-      },
-      "logo-menu": {
-        "type": "git",
-        "url": "https://github.com/Aryan20/Logomenu.git",
-        "name": "Logo Menu",
-        "uuid": "logomenu@aryan_k",
-        "build_command": "make install"
       }
     }
   },
@@ -169,7 +160,8 @@
     "flatpak_apps": {
       "org.gimp.GIMP": "GIMP (Image Editor)",
       "com.discordapp.Discord": "Discord (Chat)",
-      "com.obsproject.Studio": "OBS Studio (Screen Recording/Streaming)"
+      "com.obsproject.Studio": "OBS Studio (Screen Recording/Streaming)",
+      "org.zotero.Zotero": "Zotero"
     }
   }
 }
