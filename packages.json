@@ -131,11 +131,13 @@
     "dnf_packages": [
       "btop",
       "fastfetch",
-      "steam",
       "timeshift",
       "unzip",
       "p7zip",
-      "p7zip-plugins"
+      "p7zip-plugins",
+      "xpad",
+      "xboxdrv",
+      "libusb"
     ],
     "custom_repo_dnf_packages": {
       "visual_studio_code": {
@@ -161,7 +163,8 @@
       "org.gimp.GIMP": "GIMP (Image Editor)",
       "com.discordapp.Discord": "Discord (Chat)",
       "com.obsproject.Studio": "OBS Studio (Screen Recording/Streaming)",
-      "org.zotero.Zotero": "Zotero"
+      "org.zotero.Zotero": "Zotero",
+      "com.valvesoftware.Steam": "Steam"
     }
   }
 }
