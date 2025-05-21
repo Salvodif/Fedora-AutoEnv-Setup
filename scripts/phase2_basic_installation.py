@@ -97,6 +97,29 @@ def run_phase2(app_config: dict) -> bool:
         else:
             app_logger.info("No 'dnf_groups_sound_video' config.")
 
+    # 3. Install Flatpak applications (if any)
+    if overall_success:
+        con.print_info("\nStep 3: Installing Flatpak applications...")
+        app_logger.info("Phase 2, Step 3: Installing Flatpak applications.")
+        flatpak_apps_config = phase2_config.get("flatpak_apps", {})
+        if flatpak_apps_config:
+            if not system_utils.install_flatpak_apps(
+                apps_to_install=flatpak_apps_config,
+                system_wide=True, # Typically Flatpaks in early phases are system-wide utilities
+                print_fn_info=con.print_info,
+                print_fn_error=con.print_error,
+                print_fn_sub_step=con.print_sub_step,
+                logger=app_logger
+            ):
+                overall_success = False
+                app_logger.error("Failed to install one or more Flatpak applications in Phase 2.")
+            else:
+                app_logger.info(f"Successfully processed Flatpak applications in Phase 2: {list(flatpak_apps_config.keys())}")
+        else:
+            con.print_info("No Flatpak applications listed for installation in Phase 2.")
+            app_logger.info("No Flatpak applications listed for Phase 2.")
+
+
     if overall_success:
         con.print_success("Phase 2: Basic System Package Configuration completed successfully.")
         app_logger.info("Phase 2 completed successfully.")

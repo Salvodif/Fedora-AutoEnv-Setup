@@ -32,7 +32,11 @@
     },
     "dnf_groups_sound_video": [
       "sound-and-video"
-    ]
+    ],
+    "flatpak_apps": {
+      "com.usebottles.bottles": "Bottles for managing your wineprefixes on Linux",
+      "com.github.tchx84.Flatseal":"Flatseal is a graphical utility to review and modify permissions from your Flatpak applications"
+    }
   },
   "phase3_terminal_enhancement": {
     "autin": "cargo install atuin",
@@ -164,11 +168,8 @@
     },
     "flatpak_apps": {
       "org.gimp.GIMP": "GIMP (Image Editor)",
-      "com.spotify.Client": "Spotify (Music Streaming)",
       "com.discordapp.Discord": "Discord (Chat)",
-      "com.obsproject.Studio": "OBS Studio (Screen Recording/Streaming)",
-      "com.usebottles.bottles": "Bottles lets you run Windows software on Linux",
-      "com.github.tchx84.Flatseal": "Flatseal is a graphical utility to review and modify permissions from your Flatpak applications"
+      "com.obsproject.Studio": "OBS Studio (Screen Recording/Streaming)"
     }
   }
 }
