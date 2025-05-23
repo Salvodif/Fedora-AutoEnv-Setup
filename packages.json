@@ -24,6 +24,7 @@
       "fzf",
       "libreoffice-opensymbol-fonts",
       "mscore-fonts-all",
+      "duf",
       "zsh"
     ],
     "dnf_swap_ffmpeg": {
@@ -47,6 +48,7 @@
     "autin": "cargo install atuin",
     "eza": "cargo install eza",
     "fd-find": "cargo install fd-find",
+    "du-dust": "cargo install du-dust",
     "zoxide": "curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh",
     "omz": "curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | bash",
     "zsh-autosuggestions": "git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions",
@@ -113,6 +115,20 @@
         "name": "Wireless HID",
         "uuid": "wireless-hid@chlumskyvaclav.gmail.com",
         "build_command": "make build && make install"
+      },
+      "ArcMenu": {
+        "type": "git",
+        "url": "https://gitlab.com/arcmenu/ArcMenu.git",
+        "name": "ArcMenu",
+        "uuid": "arcmenu@arcmenu.com",
+        "build_command": "make install"
+      },
+      "AlphabeticalAppGrid": {
+        "type": "git",
+        "url": "https://github.com/stuarthayhurst/alphabetical-grid-extension.git",
+        "name": "Alphabetical App Grid",
+        "uuid": "AlphabeticalAppGrid@stuarthayhurst",
+        "build_command": "gnome-extensions install 'AlphabeticalAppGrid@stuarthayhurst.shell-extension.zip' --force"
       }
     }
   },
@@ -157,14 +173,21 @@
             "sudo dnf config-manager --set-enabled google-chrome"
         ],
         "dnf_package_to_install": "google-chrome-stable"
-      }
-    },
+      },
+      "xpadneo": {
+        "name": "Atim Xpadneo",
+        "check_if_installed_pkg": "xpadneo",
+        "repo_setup_commands": [
+            "sudo dnf copr enable atim/xpadneo",
+            "sudo dnf install xpadneo"
+        ],
+        "dnf_package_to_install": "xpadneo"
+    }},
     "flatpak_apps": {
       "org.gimp.GIMP": "GIMP (Image Editor)",
       "com.discordapp.Discord": "Discord (Chat)",
       "com.obsproject.Studio": "OBS Studio (Screen Recording/Streaming)",
-      "org.zotero.Zotero": "Zotero",
-      "com.valvesoftware.Steam": "Steam"
+      "org.zotero.Zotero": "Zotero"
     }
   }
 }

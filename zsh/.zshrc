@@ -89,6 +89,7 @@ plugins=(git
 source $ZSH/oh-my-zsh.sh
 
 alias df="dust"
+alias du="duf"
 alias top="btop"
 alias cat="bat"
 alias find="fd"
