@@ -1,13 +1,10 @@
-# Fedora-AutoEnv-Setup/scripts/phase4_gnome_configuration.py
-
 import subprocess
 import sys
 import os
 import shlex 
 from pathlib import Path
-# import tempfile # Not directly used, mktemp is via run_command
 from typing import Optional, Dict, List
-import logging # Retained for type hints
+import logging
 import time 
 
 # Adjust import path
@@ -19,6 +16,7 @@ from scripts.logger_utils import app_logger
 
 # --- Constants ---
 USER_EXTENSIONS_BASE_DIR_REL_PATH = Path(".local/share/gnome-shell/extensions") # Relative to user's home
+USER_THEMES_BASE_DIR_REL_PATH = Path(".themes") # Relative to user's home for GTK/WM themes
 
 # --- Helper Functions ---
 
@@ -213,38 +211,179 @@ def _install_git_extension_direct_move(
             except Exception as e_cleanup:
                 app_logger.warning(f"Failed to clean up temporary directory {temp_clone_parent_dir_obj} (user: {target_user}): {e_cleanup}")
 
+def _install_git_theme(
+    theme_key: str,
+    theme_cfg: Dict[str, any],
+    target_user: str,
+    target_user_home: Path # Already resolved absolute path to user's home
+) -> bool:
+    """
+    Clones a GTK/WM theme from Git into a temporary directory,
+    optionally runs a build command, then moves the relevant (sub)directory
+    to the user's local themes folder (~/.themes/RepoName).
+    Applying the theme is NOT handled by this function.
+    """
+    friendly_name = theme_cfg.get("name", theme_key) # For display
+    git_url = theme_cfg.get("url")
+    build_command_template = theme_cfg.get("build_command", "")
+    theme_source_subdir_in_clone = theme_cfg.get("theme_source_subdir", "")
+
+    if not git_url:
+        con.print_error(f"Missing 'url' for Git-based theme '{friendly_name}'. Skipping installation.")
+        app_logger.error(f"Missing 'url' for Git-based theme '{friendly_name}' (key: {theme_key}).")
+        return False
+
+    app_logger.info(f"Processing Git-based theme '{friendly_name}' from URL '{git_url}' for user '{target_user}'.")
+    con.print_sub_step(f"Installing Git-based theme: {friendly_name}")
+
+    repo_name_from_url = Path(git_url).name.removesuffix(".git")
+    if not repo_name_from_url:
+        con.print_error(f"Could not determine repository name from URL '{git_url}' for theme '{friendly_name}'.")
+        app_logger.error(f"Could not determine repo name for theme '{friendly_name}' from URL '{git_url}'.")
+        return False
+
+    user_themes_dir_abs = target_user_home / USER_THEMES_BASE_DIR_REL_PATH
+    final_theme_dest_path_abs = user_themes_dir_abs / repo_name_from_url
+    temp_clone_parent_dir_obj: Optional[Path] = None
+
+    try:
+        if not system_utils.ensure_dir_exists(
+            user_themes_dir_abs, target_user=target_user, logger=app_logger,
+            print_fn_info=con.print_info, print_fn_error=con.print_error, print_fn_success=None
+        ):
+            con.print_error(f"Failed to create or verify user themes directory: {user_themes_dir_abs}. Cannot install theme '{friendly_name}'.")
+            app_logger.error(f"Failed to ensure themes directory '{user_themes_dir_abs}' for user '{target_user}'.")
+            return False
+
+        temp_parent_dir_name_prefix = f"gnome_theme_clone_{theme_key}_{os.getpid()}_{int(time.time())}"
+        user_cache_dir_abs = target_user_home / ".cache"
+        system_utils.ensure_dir_exists(user_cache_dir_abs, target_user=target_user, logger=app_logger, print_fn_info=None)
+
+        temp_clone_parent_dir_str = ""
+        try:
+            proc_mktemp_cache = system_utils.run_command(
+                f"mktemp -d -p {shlex.quote(str(user_cache_dir_abs))} {temp_parent_dir_name_prefix}_XXXXXX",
+                run_as_user=target_user, shell=True, capture_output=True, check=True, logger=app_logger, print_fn_info=None
+            )
+            temp_clone_parent_dir_str = proc_mktemp_cache.stdout.strip()
+        except Exception:
+            app_logger.warning(f"Failed to create temp dir in user's .cache for '{friendly_name}', trying system /tmp.")
+            proc_mktemp_tmp = system_utils.run_command(
+                f"mktemp -d -t {temp_parent_dir_name_prefix}_XXXXXX",
+                run_as_user=target_user, shell=True, capture_output=True, check=True, logger=app_logger, print_fn_info=None
+            )
+            temp_clone_parent_dir_str = proc_mktemp_tmp.stdout.strip()
+
+        if not temp_clone_parent_dir_str:
+            raise Exception("Failed to create any temporary directory for cloning theme.")
+        
+        temp_clone_parent_dir_obj = Path(temp_clone_parent_dir_str)
+        app_logger.info(f"Created temporary parent directory for theme clone: {temp_clone_parent_dir_obj} (as user '{target_user}')")
+        
+        cloned_repo_path_in_temp_abs = temp_clone_parent_dir_obj / repo_name_from_url
+
+        con.print_info(f"Cloning theme '{git_url}' into '{cloned_repo_path_in_temp_abs}' as user '{target_user}'...")
+        git_clone_cmd = ["git", "clone", "--depth=1", git_url, str(cloned_repo_path_in_temp_abs)]
+        system_utils.run_command(
+            git_clone_cmd, run_as_user=target_user,
+            capture_output=True, check=True, print_fn_info=con.print_info, logger=app_logger
+        )
+        app_logger.info(f"Successfully cloned theme '{friendly_name}' to '{cloned_repo_path_in_temp_abs}' as user '{target_user}'.")
+
+        if build_command_template:
+            processed_build_command = build_command_template.replace("$HOME", str(target_user_home))
+            con.print_info(f"Running build command '{processed_build_command}' for theme '{friendly_name}' in '{cloned_repo_path_in_temp_abs}' as user '{target_user}'...")
+            system_utils.run_command(
+                processed_build_command, cwd=str(cloned_repo_path_in_temp_abs),
+                run_as_user=target_user, shell=True, capture_output=True, check=True,
+                print_fn_info=con.print_info, logger=app_logger
+            )
+            app_logger.info(f"Build command '{processed_build_command}' completed for theme '{friendly_name}' as user '{target_user}'.")
+        else:
+            app_logger.info(f"No build command specified for theme '{friendly_name}'.")
+
+        effective_theme_source_path_abs = cloned_repo_path_in_temp_abs
+        if theme_source_subdir_in_clone:
+            effective_theme_source_path_abs = cloned_repo_path_in_temp_abs / theme_source_subdir_in_clone
+            app_logger.info(f"Using subdirectory '{theme_source_subdir_in_clone}' as effective theme source: {effective_theme_source_path_abs}")
+
+        theme_check_script = (
+            f"dir={shlex.quote(str(effective_theme_source_path_abs))}; "
+            f"test -d \"$dir\" && ("
+            f"  test -f \"$dir/index.theme\" || "
+            f"  test -d \"$dir/gtk-3.0\" || "
+            f"  test -d \"$dir/gtk-4.0\" "
+            f")"
+        )
+        theme_valid_proc = system_utils.run_command(
+            theme_check_script, run_as_user=target_user, shell=True,
+            check=False, capture_output=True, logger=app_logger, print_fn_info=None
+        )
+        if theme_valid_proc.returncode != 0:
+            con.print_error(f"Directory '{effective_theme_source_path_abs}' does not appear to be a valid theme directory for '{friendly_name}'. Check 'theme_source_subdir' or build output.")
+            app_logger.error(f"Validation failed for theme source path '{effective_theme_source_path_abs}' for theme '{friendly_name}'.")
+            return False
+
+        check_old_dest_cmd = f"test -d {shlex.quote(str(final_theme_dest_path_abs))}"
+        old_dest_exists_proc = system_utils.run_command(
+            check_old_dest_cmd, run_as_user=target_user, shell=True,
+            check=False, capture_output=True, logger=app_logger, print_fn_info=None
+        )
+        if old_dest_exists_proc.returncode == 0:
+            con.print_info(f"Removing existing theme directory at '{final_theme_dest_path_abs}' as user '{target_user}'...")
+            rm_old_dest_cmd = f"rm -rf {shlex.quote(str(final_theme_dest_path_abs))}"
+            system_utils.run_command(
+                rm_old_dest_cmd, run_as_user=target_user, shell=True,
+                check=True, print_fn_info=con.print_info, logger=app_logger
+            )
+
+        mv_cmd = f"mv {shlex.quote(str(effective_theme_source_path_abs))} {shlex.quote(str(final_theme_dest_path_abs))}"
+        con.print_info(f"Moving '{effective_theme_source_path_abs}' to '{final_theme_dest_path_abs}' as user '{target_user}'...")
+        system_utils.run_command(
+            mv_cmd, run_as_user=target_user, shell=True,
+            check=True, print_fn_info=con.print_info, logger=app_logger
+        )
+
+        con.print_success(f"Theme '{friendly_name}' installed successfully to '{final_theme_dest_path_abs}'.")
+        app_logger.info(f"Git theme '{friendly_name}' installed to '{final_theme_dest_path_abs}' for user '{target_user}'.")
+        return True
+
+    except Exception as e:
+        con.print_error(f"Failed to install Git-based theme '{friendly_name}'. Error: {e}")
+        app_logger.error(f"Installation of Git-based theme '{friendly_name}' failed for user '{target_user}'. Error: {e}", exc_info=True)
+        return False
+    finally:
+        if temp_clone_parent_dir_obj and temp_clone_parent_dir_obj.is_dir():
+            app_logger.info(f"Cleaning up temporary theme clone parent directory: {temp_clone_parent_dir_obj} (as user '{target_user}')")
+            cleanup_cmd = f"rm -rf {shlex.quote(str(temp_clone_parent_dir_obj))}"
+            try:
+                system_utils.run_command(cleanup_cmd, run_as_user=target_user, shell=True, check=False, print_fn_info=None, logger=app_logger)
+            except Exception as e_cleanup:
+                app_logger.warning(f"Failed to clean up temporary theme directory {temp_clone_parent_dir_obj} (user: {target_user}): {e_cleanup}")
+
 def _apply_gnome_setting( target_user: str, schema: str, key: str, value_str: str, setting_description: str ) -> bool:
     """Applies a GSetting for the target user. value_str is the string representation of the value."""
     app_logger.info(f"Applying GSetting for user '{target_user}': Schema='{schema}', Key='{key}', Value='{value_str}' ({setting_description})")
     con.print_sub_step(f"Applying GSetting: {setting_description}...")
     
-    # Construct the command. gsettings expects the value part correctly quoted if it's a string.
-    # Example: gsettings set org.gnome.desktop.interface gtk-theme 'Adwaita-dark'
-    # Example: gsettings set org.gnome.desktop.wm.preferences button-layout 'appmenu:minimize,maximize,close'
-    # The value_str should already be prepared with necessary quotes if it's a string literal for gsettings.
-    # e.g. if value is "Adwaita-dark", value_str should be "'Adwaita-dark'"
     cmd_for_gsettings = f"gsettings set {shlex.quote(schema)} {shlex.quote(key)} {value_str}"
-    
-    # gsettings needs a D-Bus session. dbus-run-session helps run a command within a new session.
-    # This is crucial when running gsettings commands from scripts, especially as another user or root.
     full_cmd_with_dbus = f"dbus-run-session -- {cmd_for_gsettings}"
     
     try:
         system_utils.run_command(
             full_cmd_with_dbus, 
             run_as_user=target_user, 
-            shell=True, # dbus-run-session and the gsettings command benefit from shell
-            capture_output=True, # Capture output for logging
-            check=True, # Fail on non-zero exit code
-            print_fn_info=con.print_info, # For "Executing..."
-            print_fn_error=con.print_error, # For errors from run_command
+            shell=True, 
+            capture_output=True, 
+            check=True, 
+            print_fn_info=con.print_info, 
+            print_fn_error=con.print_error, 
             logger=app_logger
         )
         con.print_success(f"GSetting '{setting_description}' applied successfully for user '{target_user}'.")
         app_logger.info(f"GSetting '{setting_description}' applied for '{target_user}'.")
         return True
     except subprocess.CalledProcessError as e:
-        # run_command already logs and prints error
         app_logger.error(f"Failed to apply GSetting '{setting_description}' for user '{target_user}'. Exit: {e.returncode}, Stderr: {e.stderr or e.stdout}", exc_info=False)
         return False
     except Exception as e_unexp: 
@@ -252,26 +391,56 @@ def _apply_gnome_setting( target_user: str, schema: str, key: str, value_str: st
         app_logger.error(f"Unexpected error applying GSetting '{setting_description}' for '{target_user}': {e_unexp}", exc_info=True)
         return False
 
+def _apply_gnome_theme_settings(target_user: str, gsettings_theme_name: str, theme_friendly_name: str) -> bool:
+    """Applies GTK and Window Manager (WM) theme settings using GSettings."""
+    con.print_sub_step(f"Applying theme '{theme_friendly_name}' (GSettings name: '{gsettings_theme_name}')...")
+    app_logger.info(f"Applying GTK and WM theme '{gsettings_theme_name}' for user '{target_user}'.")
+
+    gsettings_value_str = f"'{gsettings_theme_name}'"
+
+    gtk_theme_success = _apply_gnome_setting(
+        target_user,
+        "org.gnome.desktop.interface",
+        "gtk-theme",
+        gsettings_value_str,
+        f"GTK Theme to {theme_friendly_name}"
+    )
+
+    wm_theme_success = _apply_gnome_setting(
+        target_user,
+        "org.gnome.desktop.wm.preferences",
+        "theme",
+        gsettings_value_str,
+        f"Window Manager (Titlebar) Theme to {theme_friendly_name}"
+    )
+
+    if gtk_theme_success and wm_theme_success:
+        con.print_success(f"Theme '{theme_friendly_name}' applied successfully for GTK and Window Manager.")
+        app_logger.info(f"Successfully applied theme '{gsettings_theme_name}' for GTK and WM for user '{target_user}'.")
+        return True
+    else:
+        con.print_warning(f"One or more GSettings failed while applying theme '{theme_friendly_name}'. Check details above.")
+        app_logger.warning(f"Failed to fully apply theme '{gsettings_theme_name}' for user '{target_user}'. GTK success: {gtk_theme_success}, WM success: {wm_theme_success}")
+        return False
+
 def _apply_dark_mode(target_user: str) -> bool:
     """Applies dark mode settings for the target user."""
     app_logger.info(f"Setting dark mode for user '{target_user}'.")
     con.print_sub_step("Applying Dark Mode settings...")
     
-    # For modern GNOME (Fedora 36+ typically)
     color_scheme_success = _apply_gnome_setting(
         target_user, 
         "org.gnome.desktop.interface", 
         "color-scheme", 
-        "'prefer-dark'", # Value for gsettings (string literal 'prefer-dark')
+        "'prefer-dark'", 
         "Color Scheme to Prefer Dark"
     )
     
-    # Fallback/Traditional GTK theme setting (still often respected or useful)
     gtk_theme_success = _apply_gnome_setting(
         target_user, 
         "org.gnome.desktop.interface", 
         "gtk-theme", 
-        "'Adwaita-dark'", # Value for gsettings (string literal 'Adwaita-dark')
+        "'Adwaita-dark'", 
         "GTK Theme to Adwaita-dark"
     )
     
@@ -280,34 +449,29 @@ def _apply_dark_mode(target_user: str) -> bool:
     if not gtk_theme_success: 
         app_logger.warning(f"Failed to set 'gtk-theme' to 'Adwaita-dark' for user '{target_user}'.")
         
-    # Consider success if at least one, or preferably color-scheme, succeeded.
-    # For this script, we'll say it's generally successful if color-scheme works,
-    # as that's the more modern approach.
     return color_scheme_success
 
 # --- Main Phase Function ---
 def run_phase4(app_config: dict) -> bool:
-    app_logger.info("Starting Phase 4: GNOME Configuration & Direct Git Extensions Install.")
-    con.print_step("PHASE 4: GNOME Configuration & Direct Git Extensions Install")
+    app_logger.info("Starting Phase 4: GNOME Configuration, Extensions & Themes.")
+    con.print_step("PHASE 4: GNOME Configuration, Extensions & Themes")
     overall_success = True
     
     phase4_config = config_loader.get_phase_data(app_config, "phase4_gnome_configuration")
     if not isinstance(phase4_config, dict):
-        app_logger.warning("No valid Phase 4 configuration data found (expected a dictionary). Skipping GNOME configuration.")
+        app_logger.warning("No valid Phase 4 configuration data found. Skipping GNOME configuration.")
         con.print_warning("No Phase 4 configuration data found. Skipping GNOME configuration.")
-        return True # Successfully skipped
+        return True 
 
     target_user = system_utils.get_target_user(
         logger=app_logger, print_fn_info=con.print_info, 
         print_fn_error=con.print_error, print_fn_warning=con.print_warning
     )
     if not target_user: 
-        # Error already printed by get_target_user
         return False 
     
     target_user_home = system_utils.get_user_home_dir(target_user, logger=app_logger, print_fn_error=con.print_error)
     if not target_user_home: 
-        # Error already printed by get_user_home_dir
         app_logger.error(f"CRITICAL: Could not determine home directory for '{target_user}'. Aborting GNOME configuration phase.")
         return False
 
@@ -319,16 +483,11 @@ def run_phase4(app_config: dict) -> bool:
     app_logger.info("Phase 4, Step 1: Installing support tools.")
     
     dnf_packages_ph4 = phase4_config.get("dnf_packages", [])
-    # Ensure git is available if Git-based extensions are to be installed
-    if phase4_config.get("gnome_extensions"):
-        git_found = False
-        for pkg in dnf_packages_ph4: # Check if git or git-core is already listed
-            if isinstance(pkg, str) and ("git-core" == pkg or "git" == pkg):
-                git_found = True
-                break
+    if phase4_config.get("gnome_extensions") or phase4_config.get("gnome_themes"):
+        git_found = any(pkg == "git-core" or pkg == "git" for pkg in dnf_packages_ph4 if isinstance(pkg, str))
         if not git_found:
-            app_logger.info("Adding 'git-core' to DNF packages as Git extensions are configured and git was not explicitly listed.")
-            dnf_packages_ph4.append("git-core") # Add git if not already there
+            app_logger.info("Adding 'git-core' to DNF packages as Git extensions or themes are configured and git was not explicitly listed.")
+            dnf_packages_ph4.append("git-core")
 
     if dnf_packages_ph4:
         if not system_utils.install_dnf_packages(
@@ -369,26 +528,27 @@ def run_phase4(app_config: dict) -> bool:
         con.print_info("No Flatpak apps to install for Phase 4 tools.")
 
     # --- Step 2: Ensure base extensions directory exists ---
-    # This directory is $HOME/.local/share/gnome-shell/extensions
     user_extensions_dir_abs = target_user_home / USER_EXTENSIONS_BASE_DIR_REL_PATH
     con.print_info(f"\nStep 2: Ensuring GNOME Shell user extensions base directory exists ({user_extensions_dir_abs})...")
     app_logger.info(f"Phase 4, Step 2: Ensuring extensions base directory: {user_extensions_dir_abs}")
     if not system_utils.ensure_dir_exists(
         user_extensions_dir_abs, 
-        target_user=target_user, # Ensure it's owned by the user
+        target_user=target_user, 
         logger=app_logger,
         print_fn_info=con.print_info,
         print_fn_error=con.print_error,
         print_fn_success=con.print_success 
     ):
-        con.print_error(f"CRITICAL: Could not create or verify the user's GNOME Shell extensions base directory ({user_extensions_dir_abs}). Cannot install extensions.")
+        con.print_error(f"CRITICAL: Could not create or verify the user's GNOME Shell extensions base directory ({user_extensions_dir_abs}). Extensions might not install.")
         app_logger.error(f"CRITICAL: Failed to ensure extensions base directory '{user_extensions_dir_abs}' for user '{target_user}'.")
-        return False # This is critical for installing extensions
+        # Not returning False here to allow theme installation to proceed if desired.
+        # overall_success will reflect failure if extension installs subsequently fail.
+        overall_success = False # Mark that there was an issue.
 
     # --- Step 3: Install GNOME Shell Extensions directly from Git ---
     git_extensions_config_map: Dict[str, Dict] = phase4_config.get("gnome_extensions", {}) 
     if git_extensions_config_map:
-        con.print_info("\nStep 3: Installing GNOME Shell Extensions from Git by direct move...")
+        con.print_info("\nStep 3: Installing GNOME Shell Extensions from Git...")
         app_logger.info("Phase 4, Step 3: Installing Git-based GNOME extensions.")
         any_ext_failed = False
         for ext_key, ext_config_dict in git_extensions_config_map.items():
@@ -398,14 +558,13 @@ def run_phase4(app_config: dict) -> bool:
                 any_ext_failed = True
                 continue
             
-            # This phase specifically handles "git" type extensions by cloning and moving
             if ext_config_dict.get("type") != "git": 
                 app_logger.info(f"Skipping extension '{ext_config_dict.get('name', ext_key)}' as its type is not 'git' (type: {ext_config_dict.get('type')}). This installation method only handles 'git' type extensions.")
                 con.print_info(f"Skipping non-Git type extension: {ext_config_dict.get('name', ext_key)}")
-                continue # Skip non-git types in this specific logic block
+                continue 
                 
             if not _install_git_extension_direct_move(ext_key, ext_config_dict, target_user, target_user_home): 
-                any_ext_failed = True # _install_git_extension_direct_move prints its own errors
+                any_ext_failed = True 
                 app_logger.warning(f"Installation failed for Git-based extension: {ext_config_dict.get('name', ext_key)}")
         
         if any_ext_failed: 
@@ -418,25 +577,73 @@ def run_phase4(app_config: dict) -> bool:
         app_logger.info("No extensions listed under 'gnome_extensions' key in Phase 4 configuration, or key is empty.")
         con.print_info("No Git-based GNOME extensions configured for installation via direct move.")
         
-    # --- Step 4: Set Dark Mode ---
-    con.print_info("\nStep 4: Setting Dark Mode...")
-    app_logger.info("Phase 4, Step 4: Setting Dark Mode.")
-    if phase4_config.get("set_dark_mode", True): # Default to True if key is missing
+    # --- Step 4: Install and Apply GNOME Themes ---
+    con.print_info("\nStep 4: Installing and Applying GNOME Themes...")
+    app_logger.info("Phase 4, Step 4: Installing and Applying GNOME Themes.")
+    gnome_themes_config: Dict[str, Dict] = phase4_config.get("gnome_themes", {})
+    any_theme_failed_install = False
+    any_theme_failed_apply = False
+
+    if gnome_themes_config:
+        for theme_key, theme_cfg_dict in gnome_themes_config.items():
+            if not isinstance(theme_cfg_dict, dict):
+                app_logger.warning(f"Invalid configuration for theme '{theme_key}' (not a dictionary). Skipping.")
+                con.print_warning(f"Invalid configuration for theme '{theme_key}'. Skipping.")
+                any_theme_failed_install = True
+                continue
+            
+            if theme_cfg_dict.get("type") != "git":
+                app_logger.info(f"Skipping theme '{theme_cfg_dict.get('name', theme_key)}' as its type is not 'git'.")
+                con.print_info(f"Skipping non-Git type theme: {theme_cfg_dict.get('name', theme_key)}")
+                continue
+
+            theme_installed = _install_git_theme(theme_key, theme_cfg_dict, target_user, target_user_home)
+            if not theme_installed:
+                any_theme_failed_install = True
+                app_logger.warning(f"Installation failed for theme: {theme_cfg_dict.get('name', theme_key)}")
+                continue 
+
+            if theme_cfg_dict.get("apply", False):
+                gsettings_name = theme_cfg_dict.get("gsettings_name")
+                friendly_name_for_apply = theme_cfg_dict.get("name", theme_key) # Use friendly name for messages
+                if not gsettings_name:
+                    con.print_error(f"Theme '{friendly_name_for_apply}' is set to apply, but 'gsettings_name' is missing in config. Cannot apply.")
+                    app_logger.error(f"Cannot apply theme '{friendly_name_for_apply}': 'gsettings_name' missing from config for key '{theme_key}'.")
+                    any_theme_failed_apply = True
+                    continue
+                
+                if not _apply_gnome_theme_settings(target_user, gsettings_name, friendly_name_for_apply):
+                    any_theme_failed_apply = True
+                    app_logger.warning(f"Failed to apply theme settings for: {friendly_name_for_apply} (GSettings name: {gsettings_name})")
+        
+        if any_theme_failed_install or any_theme_failed_apply:
+            overall_success = False
+            con.print_warning("One or more GNOME themes encountered installation or application issues.")
+        else:
+            con.print_success("All configured GNOME themes processed successfully.")
+            app_logger.info("All configured GNOME themes processed.")
+    else:
+        app_logger.info("No GNOME themes configured for installation in Phase 4.")
+        con.print_info("No GNOME themes configured for installation.")
+
+    # --- Step 5: Set Dark Mode ---
+    con.print_info("\nStep 5: Setting Dark Mode...")
+    app_logger.info("Phase 4, Step 5: Setting Dark Mode.")
+    if phase4_config.get("set_dark_mode", True):
         if not _apply_dark_mode(target_user): 
-            # _apply_dark_mode prints its own sub-step messages
             app_logger.warning(f"Dark mode setting for user '{target_user}' encountered issues.")
-            # Not critical enough to fail the whole phase, but good to note.
+            # Not changing overall_success as this is less critical.
     else: 
         app_logger.info("Dark mode setting explicitly disabled in Phase 4 configuration.")
         con.print_info("Dark mode setting skipped as per configuration.")
 
     # --- Final Summary ---
     if overall_success:
-        app_logger.info("Phase 4 (GNOME Configuration & Direct Git Extensions Install) completed successfully.")
-        con.print_success("Phase 4: GNOME Configuration & Direct Git Extensions Install completed successfully.")
+        app_logger.info("Phase 4 (GNOME Configuration, Extensions & Themes) completed successfully.")
+        con.print_success("Phase 4: GNOME Configuration, Extensions & Themes completed successfully.")
         con.print_warning("IMPORTANT: A logout/login or GNOME Shell restart (Alt+F2, type 'r', press Enter) "
-                          "is likely required for all GNOME changes (especially new extensions) to take full effect.")
+                          "is likely required for all GNOME changes (themes, extensions) to take full effect.")
     else:
-        app_logger.error("Phase 4 (GNOME Configuration & Direct Git Extensions Install) completed with errors.")
-        con.print_error("Phase 4: GNOME Configuration & Direct Git Extensions Install completed with errors. Please review the logs.")
+        app_logger.error("Phase 4 (GNOME Configuration, Extensions & Themes) completed with errors.")
+        con.print_error("Phase 4: GNOME Configuration, Extensions & Themes completed with errors. Please review the logs.")
     return overall_success

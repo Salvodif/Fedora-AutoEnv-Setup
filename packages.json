@@ -130,6 +130,17 @@
         "uuid": "AlphabeticalAppGrid@stuarthayhurst",
         "build_command": "gnome-extensions install 'AlphabeticalAppGrid@stuarthayhurst.shell-extension.zip' --force"
       }
+    },
+    "gnome_themes": {
+        "nordic_theme": {
+            "type": "git",
+            "name": "Nordic GTK Theme",
+            "url": "https://github.com/EliverLara/Nordic.git",
+            "gsettings_name": "Nordic", 
+            "apply": true,
+            "build_command": "", 
+            "theme_source_subdir": "" 
+        }
     }
   },
   "phase5_nvidia_installation": {

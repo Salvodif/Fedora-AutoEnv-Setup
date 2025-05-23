@@ -1,5 +1,3 @@
-# Fedora-AutoEnv-Setup/install.py
-
 import json
 import sys
 import os # For os.geteuid() if we add root check
@@ -41,8 +39,8 @@ PHASES = {
         "handler": phase3_terminal_enhancement.run_phase3
     },
     "phase4_gnome_configuration": {
-        "name": "Phase 4: GNOME Configuration & Extensions 🎨🖼️",
-        "description": "Install GNOME Tweaks, Extension Manager, and configured extensions.",
+        "name": "Phase 4: GNOME Configuration, Extensions & Themes 🎨🖼️",
+        "description": "Install GNOME Tweaks, Extension Manager, configured extensions, and themes.",
         "dependencies": ["phase1_system_preparation", "phase2_basic_configuration"], # Flatpak setup in P1, pip in P2
         "handler": phase4_gnome_configuration.run_phase4
     },
@@ -207,7 +205,6 @@ def main():
 
                 con.print_info(f"\nStarting '{phase_to_run_info['name']}'...")
                 
-                # *** THE FIX IS HERE: Pass app_config to the handler ***
                 success = phase_to_run_info["handler"](app_config) 
                 
                 if success:
