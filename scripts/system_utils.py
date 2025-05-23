@@ -37,9 +37,10 @@ def run_command(
     logger: Optional[logging.Logger] = None
 ) -> subprocess.CompletedProcess:
     log = logger or default_script_logger
-    _p_info = print_fn_info or (lambda msg: None) 
+    _p_info = print_fn_info or PRINT_FN_INFO_DEFAULT
     _p_error = print_fn_error or PRINT_FN_ERROR_DEFAULT
-    # _p_sub is not directly used for printing by run_command itself, but passed for potential use by callers if they want to intercept output
+    _p_sub = print_fn_sub_step or PRINT_FN_SUB_STEP_DEFAULT
+    # _p_warning and _p_success are not used directly in this function but this pattern would apply.
 
     command_to_execute: Union[str, List[str]]
     effective_shell = shell
@@ -78,9 +79,7 @@ def run_command(
             raise TypeError("Command must be a string or list of strings.")
 
     log.info(f"Executing: {display_command_str}")
-    # Only print to console if the provided print_fn_info is not the default null-like lambda
-    if _p_info and _p_info is not PRINT_FN_INFO_DEFAULT and _p_info is not None: 
-         _p_info(f"Executing: {display_command_str}")
+    _p_info(f"Executing: {display_command_str}") # This will be a no-op if _p_info is PRINT_FN_INFO_DEFAULT
 
 
     try:
@@ -96,19 +95,17 @@ def run_command(
 
         if process.stdout and process.stdout.strip():
             log.debug(f"CMD STDOUT for '{display_command_str}':\n{process.stdout.strip()}")
-            # Only print to console if print_fn_sub_step is provided and not the default null-like lambda
-            if capture_output and print_fn_sub_step and print_fn_sub_step is not PRINT_FN_SUB_STEP_DEFAULT and print_fn_sub_step is not None:
+            if capture_output: # Check if output should be captured (and thus potentially printed)
                 stdout_summary = (process.stdout.strip()[:150] + '...') if len(process.stdout.strip()) > 150 else process.stdout.strip()
-                print_fn_sub_step(f"STDOUT: {stdout_summary}")
+                _p_sub(f"STDOUT: {stdout_summary}") # This will be a no-op if _p_sub is PRINT_FN_SUB_STEP_DEFAULT
 
 
         if process.stderr and process.stderr.strip():
             # Log stderr as warning, as some commands use stderr for non-fatal info
             log.warning(f"CMD STDERR for '{display_command_str}':\n{process.stderr.strip()}")
-            # Only print to console if print_fn_sub_step is provided and not the default null-like lambda
-            if capture_output and print_fn_sub_step and print_fn_sub_step is not PRINT_FN_SUB_STEP_DEFAULT and print_fn_sub_step is not None:
+            if capture_output: # Check if output should be captured
                 stderr_summary = (process.stderr.strip()[:150] + '...') if len(process.stderr.strip()) > 150 else process.stderr.strip()
-                print_fn_sub_step(f"STDERR: {stderr_summary}")
+                _p_sub(f"STDERR: {stderr_summary}") # This will be a no-op if _p_sub is PRINT_FN_SUB_STEP_DEFAULT
 
 
         if check and process.returncode != 0:
