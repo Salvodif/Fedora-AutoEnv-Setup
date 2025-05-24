@@ -1,4 +1,4 @@
-# updated 18 May 2025
+# updated 24 May 2025
 
 # If you come from bash you might have to change your $PATH.
 # export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
@@ -88,6 +88,18 @@ plugins=(git
 
 source $ZSH/oh-my-zsh.sh
 
+# Impostazioni per EZA (DOPO il caricamento dei plugin)
+eza_params=(
+    --git
+    --icons
+    --group
+    --group-directories-first
+    --time-style=long-iso
+)
+export eza_params
+
+export EZA_COLORS="da=1;36:di=1;36:ln=1;36:ex=1;31"
+
 alias df="dust"
 alias du="duf"
 alias top="btop"
@@ -108,3 +120,5 @@ PERL_MB_OPT="--install_base \"/home/blackpraedicator/perl5\""; export PERL_MB_OP
 PERL_MM_OPT="INSTALL_BASE=/home/blackpraedicator/perl5"; export PERL_MM_OPT;
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+export EZA_COLORS="da=1;36:di=1;36:ln=1;36:ex=1;31"
