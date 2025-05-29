@@ -24,6 +24,7 @@
       "fzf",
       "libreoffice-opensymbol-fonts",
       "mscore-fonts-all",
+      "duf",
       "zsh"
     ],
     "dnf_swap_ffmpeg": {
@@ -47,6 +48,7 @@
     "autin": "cargo install atuin",
     "eza": "cargo install eza",
     "fd-find": "cargo install fd-find",
+    "du-dust": "cargo install du-dust",
     "zoxide": "curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh",
     "omz": "curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | bash",
     "zsh-autosuggestions": "git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions",
@@ -86,6 +88,34 @@
         "uuid": "dash-to-dock@micxgx.gmail.com",
         "build_command": "make install"
       },
+      "dash-to-panel": {
+        "type": "git",
+        "url": "git clone https://github.com/home-sweet-gnome/dash-to-panel.git",
+        "name": "Dash to Panel",
+        "uuid": "dash-to-panel@jderose9.github.com",
+        "build_command": "make install"
+      },
+      "openbar": {
+        "type": "git",
+        "url": "git clone https://github.com/neuromorph/openbar.git",
+        "name": "Open Bar",
+        "uuid": "openbar@neuromorph",
+        "build_command": "mv openbar/ ~/.local/share/gnome-shell/extensions/openbar@neuromorph"
+      },
+      "Forge": {
+        "type": "git",
+        "url": "git clone https://github.com/forge-ext/forge.git",
+        "name": "Forge",
+        "uuid": "forge@jmmaranan.com",
+        "build_command": "make install"
+      },
+      "CoverflowAltTab": {
+        "type": "git",
+        "url": "git clone https://github.com/dsheeler/CoverflowAltTab.git",
+        "name": "CoverflowAltTab",
+        "uuid": "CoverflowAltTab@palatis.blogspot.com",
+        "build_command": "make all"
+      },
       "blur-my-shell": {
         "type": "git",
         "url": "https://github.com/aunetx/blur-my-shell.git",
@@ -114,7 +144,46 @@
         "uuid": "wireless-hid@chlumskyvaclav.gmail.com",
         "build_command": "make build && make install",
         "build_handles_install": true
+      },
+      "ArcMenu": {
+        "type": "git",
+        "url": "https://gitlab.com/arcmenu/ArcMenu.git",
+        "name": "ArcMenu",
+        "uuid": "arcmenu@arcmenu.com",
+        "build_command": "make install"
+      },
+      "AlphabeticalAppGrid": {
+        "type": "git",
+        "url": "https://github.com/stuarthayhurst/alphabetical-grid-extension.git",
+        "name": "Alphabetical App Grid",
+        "uuid": "AlphabeticalAppGrid@stuarthayhurst",
+        "build_command": "gnome-extensions install 'AlphabeticalAppGrid@stuarthayhurst.shell-extension.zip' --force"
+      },
+      "AzWallpaper": {
+        "type": "git",
+        "url": "https://gitlab.com/AndrewZaech/azwallpaper.git",
+        "name": "Wallpaper Slideshow",
+        "uuid": "azwallpaper@azwallpaper.gitlab.com",
+        "build_command": "make"
+      },
+      "Auto Accent Colour": {
+        "type": "git",
+        "url": "https://github.com/Wartybix/GNOME-Auto-Accent-Colour.git",
+        "name": "Auto Accent Colour",
+        "uuid": "auto-accent-colour@Wartybix",
+        "build_command": "install.sh"
       }
+    },
+    "gnome_themes": {
+        "nordic_theme": {
+            "type": "git",
+            "name": "Nordic GTK Theme",
+            "url": "https://github.com/EliverLara/Nordic.git",
+            "gsettings_name": "Nordic", 
+            "apply": true,
+            "build_command": "", 
+            "theme_source_subdir": "" 
+        }
     }
   },
   "phase5_nvidia_installation": {
@@ -158,14 +227,21 @@
             "sudo dnf config-manager --set-enabled google-chrome"
         ],
         "dnf_package_to_install": "google-chrome-stable"
-      }
-    },
+      },
+      "xpadneo": {
+        "name": "Atim Xpadneo",
+        "check_if_installed_pkg": "xpadneo",
+        "repo_setup_commands": [
+            "sudo dnf copr enable atim/xpadneo",
+            "sudo dnf install xpadneo"
+        ],
+        "dnf_package_to_install": "xpadneo"
+    }},
     "flatpak_apps": {
       "org.gimp.GIMP": "GIMP (Image Editor)",
       "com.discordapp.Discord": "Discord (Chat)",
       "com.obsproject.Studio": "OBS Studio (Screen Recording/Streaming)",
-      "org.zotero.Zotero": "Zotero",
-      "com.valvesoftware.Steam": "Steam"
+      "org.zotero.Zotero": "Zotero"
     }
   }
 }
