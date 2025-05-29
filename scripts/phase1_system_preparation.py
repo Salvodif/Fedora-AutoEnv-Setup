@@ -592,7 +592,7 @@ def run_phase1(app_config: dict) -> bool:
     if critical_success: 
         con.print_info("\nStep 4: Configuring DNS...")
         app_logger.info("Phase 1, Step 4: Configuring DNS.")
-        if not _configure_dns():
+        if not _configure_dns(app_config):
             con.print_error("DNS configuration encountered issues. Network operations might fail or be slow.")
             app_logger.error("DNS configuration failed in Phase 1.")
             critical_success = False # DNS is fairly critical
