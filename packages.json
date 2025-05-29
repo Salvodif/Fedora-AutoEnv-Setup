@@ -24,7 +24,9 @@
       "fzf",
       "libreoffice-opensymbol-fonts",
       "mscore-fonts-all",
-      "zsh"
+      "zsh",
+      "gettext",
+      "sassc"
     ],
     "dnf_swap_ffmpeg": {
       "from": "ffmpeg-free",
@@ -78,14 +80,16 @@
         "url": "https://gitlab.gnome.org/jrahmatzadeh/just-perfection.git",
         "name": "Just Perfection",
         "uuid": "just-perfection-desktop@just-perfection",
-        "build_command": "./scripts/build.sh -i"
+        "build_command": "./scripts/build.sh -i",
+        "build_handles_install": true
       },
       "dash-to-dock": {
         "type": "git",
         "url": "https://github.com/micheleg/dash-to-dock.git",
         "name": "Dash to Dock",
         "uuid": "dash-to-dock@micxgx.gmail.com",
-        "build_command": "make install"
+        "build_command": "make install",
+        "build_handles_install": true
       },
       "blur-my-shell": {
         "type": "git",
