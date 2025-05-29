@@ -1,7 +1,0 @@
-[Unit]
-Description=Backup Documenti su HDD esterno con rsync
-Wants=rsync-backup.timer
-
-[Service]
-Type=oneshot
-ExecStart=/home/blackpraedicator/scripts/kdrive-backup.zsh

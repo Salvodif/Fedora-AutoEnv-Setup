@@ -1,3 +1,5 @@
+# Fedora-AutoEnv-Setup/install.py
+
 import json
 import sys
 import os # For os.geteuid() if we add root check
@@ -13,7 +15,6 @@ from scripts import phase3_terminal_enhancement
 from scripts import phase4_gnome_configuration
 from scripts import phase5_nvidia_installation
 from scripts import phase6_additional_packages
-from scripts import phase7_systemd_services
 
 
 # --- Constants ---
@@ -40,8 +41,8 @@ PHASES = {
         "handler": phase3_terminal_enhancement.run_phase3
     },
     "phase4_gnome_configuration": {
-        "name": "Phase 4: GNOME Configuration, Extensions & Themes 🎨🖼️",
-        "description": "Install GNOME Tweaks, Extension Manager, configured extensions, and themes.",
+        "name": "Phase 4: GNOME Configuration & Extensions 🎨🖼️",
+        "description": "Install GNOME Tweaks, Extension Manager, and configured extensions.",
         "dependencies": ["phase1_system_preparation", "phase2_basic_configuration"], # Flatpak setup in P1, pip in P2
         "handler": phase4_gnome_configuration.run_phase4
     },
@@ -56,13 +57,7 @@ PHASES = {
         "description": "Install user-selected applications from DNF and Flatpak.",
         "dependencies": ["phase1_system_preparation", "phase2_basic_configuration"],
         "handler": phase6_additional_packages.run_phase6
-    },
-    "phase7_systemd_services": {
-        "name": "Phase 7: Systemd Services Deployment ⚙️",
-        "description": "Deploys custom user systemd services and scripts for background tasks (e.g., backups).",
-        "dependencies": ["phase1_system_preparation", "phase2_basic_configuration"],
-        "handler": phase7_systemd_services.run_phase7
-    },
+    }
 }
 
 # Path to the status file (in the same directory as install.py)
@@ -212,6 +207,7 @@ def main():
 
                 con.print_info(f"\nStarting '{phase_to_run_info['name']}'...")
                 
+                # *** THE FIX IS HERE: Pass app_config to the handler ***
                 success = phase_to_run_info["handler"](app_config) 
                 
                 if success:
