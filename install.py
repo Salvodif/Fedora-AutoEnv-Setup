@@ -13,6 +13,7 @@ from scripts import phase3_terminal_enhancement
 from scripts import phase4_gnome_configuration
 from scripts import phase5_nvidia_installation
 from scripts import phase6_additional_packages
+from scripts import phase7_systemd_services
 
 
 # --- Constants ---
@@ -55,7 +56,13 @@ PHASES = {
         "description": "Install user-selected applications from DNF and Flatpak.",
         "dependencies": ["phase1_system_preparation", "phase2_basic_configuration"],
         "handler": phase6_additional_packages.run_phase6
-    }
+    },
+    "phase7_systemd_services": {
+        "name": "Phase 7: Systemd Services Deployment ⚙️",
+        "description": "Deploys custom user systemd services and scripts for background tasks (e.g., backups).",
+        "dependencies": ["phase1_system_preparation", "phase2_basic_configuration"],
+        "handler": phase7_systemd_services.run_phase7
+    },
 }
 
 # Path to the status file (in the same directory as install.py)
