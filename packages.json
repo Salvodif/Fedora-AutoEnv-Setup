@@ -88,6 +88,34 @@
         "uuid": "dash-to-dock@micxgx.gmail.com",
         "build_command": "make install"
       },
+      "dash-to-panel": {
+        "type": "git",
+        "url": "git clone https://github.com/home-sweet-gnome/dash-to-panel.git",
+        "name": "Dash to Panel",
+        "uuid": "dash-to-panel@jderose9.github.com",
+        "build_command": "make install"
+      },
+      "openbar": {
+        "type": "git",
+        "url": "git clone https://github.com/neuromorph/openbar.git",
+        "name": "Open Bar",
+        "uuid": "openbar@neuromorph",
+        "build_command": "mv openbar/ ~/.local/share/gnome-shell/extensions/openbar@neuromorph"
+      },
+      "Forge": {
+        "type": "git",
+        "url": "git clone https://github.com/forge-ext/forge.git",
+        "name": "Forge",
+        "uuid": "forge@jmmaranan.com",
+        "build_command": "make install"
+      },
+      "CoverflowAltTab": {
+        "type": "git",
+        "url": "git clone https://github.com/dsheeler/CoverflowAltTab.git",
+        "name": "CoverflowAltTab",
+        "uuid": "CoverflowAltTab@palatis.blogspot.com",
+        "build_command": "make all"
+      },
       "blur-my-shell": {
         "type": "git",
         "url": "https://github.com/aunetx/blur-my-shell.git",
@@ -129,6 +157,20 @@
         "name": "Alphabetical App Grid",
         "uuid": "AlphabeticalAppGrid@stuarthayhurst",
         "build_command": "gnome-extensions install 'AlphabeticalAppGrid@stuarthayhurst.shell-extension.zip' --force"
+      },
+      "AzWallpaper": {
+        "type": "git",
+        "url": "https://gitlab.com/AndrewZaech/azwallpaper.git",
+        "name": "Wallpaper Slideshow",
+        "uuid": "azwallpaper@azwallpaper.gitlab.com",
+        "build_command": "make"
+      },
+      "Auto Accent Colour": {
+        "type": "git",
+        "url": "https://github.com/Wartybix/GNOME-Auto-Accent-Colour.git",
+        "name": "Auto Accent Colour",
+        "uuid": "auto-accent-colour@Wartybix",
+        "build_command": "install.sh"
       }
     },
     "gnome_themes": {
