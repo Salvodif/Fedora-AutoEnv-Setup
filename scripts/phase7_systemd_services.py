@@ -6,34 +6,62 @@ from pathlib import Path
 from typing import Dict, Any # Changed from List, Dict, Any to just Dict, Any as per phase6
 
 # Adjust import path for shared modules, assuming this script is in Fedora-AutoEnv-Setup/scripts/
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent)) # Make sure this is correctly placed before this block
+
+app_logger = None # Initialize to None
+con = None        # Initialize to None
 
 try:
-    from scripts import console_output as con
-    from scripts import system_utils
-    from scripts.logger_utils import app_logger
-except ImportError as e:
-    # Fallback for direct execution or if path adjustment is not perfect
-    print(f"Error importing shared modules: {e}. Ensure PYTHONPATH is set correctly or script is run from project root.")
-    # Define dummy logger/console functions if needed for basic operation or to highlight the error
-    class DummyLogger:
-        def info(self, msg): print(f"INFO: {msg}")
-        def error(self, msg, exc_info=None): print(f"ERROR: {msg}")
-        def warning(self, msg): print(f"WARNING: {msg}")
-        def debug(self, msg): print(f"DEBUG: {msg}")
-    app_logger = DummyLogger()
+    from scripts.logger_utils import app_logger # Attempt to import app_logger first
+except ImportError as e_logger:
+    # app_logger is NOT available if this block is hit.
+    # Log this specific failure using a basic print to stderr, as neither con nor app_logger is guaranteed yet.
+    print(f"CRITICAL ERROR in {Path(__file__).name}: Failed to import 'app_logger' from 'scripts.logger_utils'. Details: {e_logger}. File logging will be unavailable.", file=sys.stderr)
+    # app_logger remains None. We don't exit yet; 'con' might still import and provide better user feedback.
+except Exception as e_logger_other: # Catch any other unexpected error during app_logger import
+    print(f"UNEXPECTED CRITICAL ERROR in {Path(__file__).name} during import of 'app_logger': {e_logger_other}. File logging will be unavailable.", file=sys.stderr)
 
-    class DummyConsole:
-        def print_step(self, msg): print(f"STEP: {msg}")
-        def print_sub_step(self, msg): print(f"SUB_STEP: {msg}")
-        def print_info(self, msg): print(f"INFO: {msg}")
-        def print_success(self, msg): print(f"SUCCESS: {msg}")
-        def print_warning(self, msg): print(f"WARNING: {msg}")
-        def print_error(self, msg): print(f"ERROR: {msg}")
-    con = DummyConsole()
-    # It's often better to re-raise or exit if core components can't be imported
-    # For now, this allows the script structure to be laid out.
-    # Consider exiting if these are critical: sys.exit(1) 
+
+try:
+    from scripts import console_output as con # Attempt to import con
+except ImportError as e_console:
+    # con is NOT available if this block is hit.
+    # If app_logger IS available (i.e., its import succeeded and it's not None), use it to log this failure.
+    if app_logger: # Check if app_logger was successfully imported
+        app_logger.critical(f"CRITICAL: Failed to import 'console_output as con'. Details: {e_console}. Essential console output is unavailable. Script cannot continue.", exc_info=True)
+    else:
+        # Neither app_logger nor con is available. This is the last resort print.
+        print(f"CRITICAL ERROR in {Path(__file__).name}: Failed to import 'console_output as con'. Details: {e_console}. Neither logger nor console utilities are available. Script cannot continue.", file=sys.stderr)
+    
+    # Since console output (con) is critical for user interaction and feedback, exit if it fails to load.
+    sys.exit(1) # Exit directly, as con is not available to call con.print_error(..., exit_after=True)
+except Exception as e_console_other: # Catch any other unexpected error during con import
+    if app_logger:
+        app_logger.critical(f"UNEXPECTED CRITICAL ERROR in {Path(__file__).name} during import of 'console_output as con': {e_console_other}. Script cannot continue.", exc_info=True)
+    else:
+        print(f"UNEXPECTED CRITICAL ERROR in {Path(__file__).name} during import of 'console_output as con': {e_console_other}. Script cannot continue.", file=sys.stderr)
+    sys.exit(1)
+
+
+# --- At this point, 'con' MUST be available, or the script would have exited. ---
+
+# Check if app_logger failed to import (it would still be None). 
+# If so, use 'con' (which is now guaranteed to be available) to report this.
+if app_logger is None:
+    # This message indicates that the earlier print to stderr about app_logger import failure occurred.
+    # con.print_error will provide a more user-friendly and consistently styled message.
+    con.print_error(
+        f"Logger utility ('app_logger' in {Path(__file__).name}) failed to initialize due to an import error. "
+        "Logging to file will not function. Please review console error messages above for specific details."
+    )
+    # Optional: Exit if file logging is absolutely critical
+    # con.print_error("Exiting because file logging is a critical requirement.", exit_after=True)
+
+# --- The rest of the script (run_phase7 function, etc.) follows below ---
+# Ensure that all uses of app_logger in the rest of the script are conditional, e.g.:
+# if app_logger:
+#     app_logger.info("This is a log message.")
+# Or, implement a fallback mechanism if app_logger is None.
 
 # Placeholder for the main function for this phase
 def run_phase7(app_config: Dict[str, Any]) -> bool:
