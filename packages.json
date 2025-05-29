@@ -157,6 +157,20 @@
         "name": "Alphabetical App Grid",
         "uuid": "AlphabeticalAppGrid@stuarthayhurst",
         "build_command": "gnome-extensions install 'AlphabeticalAppGrid@stuarthayhurst.shell-extension.zip' --force"
+      },
+      "AzWallpaper": {
+        "type": "git",
+        "url": "https://gitlab.com/AndrewZaech/azwallpaper.git",
+        "name": "Wallpaper Slideshow",
+        "uuid": "azwallpaper@azwallpaper.gitlab.com",
+        "build_command": "make"
+      },
+      "Auto Accent Colour": {
+        "type": "git",
+        "url": "https://github.com/Wartybix/GNOME-Auto-Accent-Colour.git",
+        "name": "Auto Accent Colour",
+        "uuid": "auto-accent-colour@Wartybix",
+        "build_command": "install.sh"
       }
     },
     "gnome_themes": {
