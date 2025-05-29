@@ -4,6 +4,7 @@ import subprocess
 import sys
 import os 
 import shlex # For quoting paths in commands
+import shutil # <--- ADD THIS LINE
 import tempfile # For temporary directories/files
 from pathlib import Path
 from typing import Optional, List, Dict 
