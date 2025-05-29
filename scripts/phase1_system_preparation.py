@@ -27,199 +27,308 @@ DNF_CONF_PATH = Path("/etc/dnf/dnf.conf")
 
 # _backup_file was moved to system_utils.backup_system_file
 
-def _configure_dns() -> bool:
-    """Configures system DNS, preferring systemd-resolved, then attempting /etc/resolv.conf."""
-    con.print_sub_step("Configuring DNS...")
-    systemd_active = False
-    # Check if /etc/resolv.conf is a symlink to a systemd-resolved stub file
+# --- DNS Configuration Helper Functions ---
+
+def _is_systemd_resolved_active() -> bool:
+    """Checks if systemd-resolved is active and potentially managing /etc/resolv.conf."""
+    app_logger.debug("Checking if systemd-resolved is active.")
+    systemd_managed_symlink = False
     if RESOLV_CONF_PATH.is_symlink():
         try:
-            link_target = os.readlink(RESOLV_CONF_PATH) 
-            # Common targets for systemd-resolved
+            link_target = os.readlink(RESOLV_CONF_PATH)
             if "systemd" in link_target or "resolved" in link_target or "stub-resolv.conf" in link_target:
-                systemd_active = True
-                con.print_info(f"{RESOLV_CONF_PATH} is a symlink pointing to a systemd-resolved managed file: {link_target}")
-        except OSError as e: # Handle potential errors reading symlink
+                systemd_managed_symlink = True
+                app_logger.info(f"{RESOLV_CONF_PATH} is a symlink to a systemd-managed file: {link_target}")
+        except OSError as e:
             app_logger.warning(f"Error reading symlink {RESOLV_CONF_PATH}: {e}")
-            # Continue to check service status
-            pass 
 
-    # If not a clear symlink, or if symlink read failed, check service status
-    if not systemd_active: 
-        try:
-            status_proc = system_utils.run_command(
-                ["systemctl", "is-active", "systemd-resolved.service"],
-                capture_output=True, check=False, # check=False as non-zero means inactive/not found
-                print_fn_info=None, # Be quiet for this check
-                logger=app_logger
-            )
-            if status_proc.returncode == 0 and status_proc.stdout.strip() == "active":
-                systemd_active = True
-                con.print_info("systemd-resolved.service is active.")
-            else:
-                con.print_info("systemd-resolved.service is not active or not found via systemctl.")
-        except (FileNotFoundError, subprocess.CalledProcessError) as e: 
-            con.print_info(f"systemctl command not found or failed ({e}); assuming systemd-resolved is not managing DNS this way.")
-            app_logger.info(f"systemctl check for systemd-resolved failed or command not found: {e}")
-            # systemd-resolved might still be active but uncheckable this way in some minimal envs
-            pass 
-
-    if systemd_active:
-        con.print_info(f"systemd-resolved appears active. Attempting to configure DNS via {SYSTEMD_RESOLVED_CONF_PATH}.")
-        if not SYSTEMD_RESOLVED_CONF_PATH.exists():
-            con.print_info(f"{SYSTEMD_RESOLVED_CONF_PATH} does not exist. Attempting to create it with default [Resolve] section.")
-            try:
-                # Ensure parent directory exists and create file with [Resolve] header
-                # Using sudo for mkdir and tee
-                system_utils.run_command(
-                    f"sudo mkdir -p {shlex.quote(str(SYSTEMD_RESOLVED_CONF_PATH.parent))} && "
-                    f"echo '[Resolve]' | sudo tee {shlex.quote(str(SYSTEMD_RESOLVED_CONF_PATH))} > /dev/null",
-                    shell=True, check=True, 
-                    print_fn_info=con.print_info, # Show "Executing..."
-                    logger=app_logger
-                )
-            except Exception as e_create:
-                con.print_error(f"Failed to create {SYSTEMD_RESOLVED_CONF_PATH}: {e_create}")
-                app_logger.error(f"Creation of {SYSTEMD_RESOLVED_CONF_PATH} failed: {e_create}", exc_info=True)
-                return False # Cannot proceed with systemd-resolved config
-        
-        system_utils.backup_system_file(
-            SYSTEMD_RESOLVED_CONF_PATH, 
-            sudo_required=True, 
-            logger=app_logger,
-            print_fn_info=con.print_info, # Pass console printers
-            print_fn_warning=con.print_warning
-        )
-        
-        try:
-            import configparser # Import here as it's specific to this block
-            parser = configparser.ConfigParser(comment_prefixes=('#',';'), allow_no_value=True, strict=False) # strict=False for dnf.conf like files
-            # Read current config (sudo cat needed as resolved.conf is root-owned)
-            read_proc = system_utils.run_command(
-                ["sudo", "cat", str(SYSTEMD_RESOLVED_CONF_PATH)], capture_output=True, check=True,
-                print_fn_info=None, logger=app_logger # Quiet read
-            )
-            parser.read_string(read_proc.stdout)
-
-            if not parser.has_section("Resolve"):
-                parser.add_section("Resolve") # Add [Resolve] section if missing
-
-            changes_made = False
-            all_google_dns = GOOGLE_DNS_IPV4 + GOOGLE_DNS_IPV6
-            dns_servers_str = " ".join(all_google_dns) # Space-separated for systemd-resolved
-            
-            current_dns_in_config = parser.get("Resolve", "DNS", fallback="").strip()
-            # A more robust check would split current_dns_in_config and check set equality.
-            # For now, direct string comparison is simpler if we control the format.
-            if current_dns_in_config != dns_servers_str:
-                parser.set("Resolve", "DNS", dns_servers_str)
-                changes_made = True
-                app_logger.info(f"Setting DNS in {SYSTEMD_RESOLVED_CONF_PATH} to: {dns_servers_str}")
-            
-            domains_setting = "~." # Use these DNS servers for all domains
-            if parser.get("Resolve", "Domains", fallback="") != domains_setting:
-                parser.set("Resolve", "Domains", domains_setting)
-                changes_made = True
-                app_logger.info(f"Setting Domains in {SYSTEMD_RESOLVED_CONF_PATH} to: {domains_setting}")
-
-            if changes_made:
-                con.print_info(f"Updating DNS settings in {SYSTEMD_RESOLVED_CONF_PATH}...")
-                # Use a unique temporary file name for writing the new config
-                temp_resolved_conf = Path(f"/tmp/resolved_conf_new_{os.getpid()}_{int(time.time())}.conf")
-                with open(temp_resolved_conf, 'w', encoding='utf-8') as f_write:
-                    parser.write(f_write, space_around_delimiters=False) # Write changes to temp file
-                
-                # Safely replace the original file with sudo
-                system_utils.run_command(["sudo", "cp", str(temp_resolved_conf), str(SYSTEMD_RESOLVED_CONF_PATH)], print_fn_info=con.print_info, logger=app_logger)
-                system_utils.run_command(["sudo", "chown", "root:systemd-resolve", str(SYSTEMD_RESOLVED_CONF_PATH)], print_fn_info=con.print_info, logger=app_logger) # Correct ownership
-                system_utils.run_command(["sudo", "chmod", "644", str(SYSTEMD_RESOLVED_CONF_PATH)], print_fn_info=con.print_info, logger=app_logger) # Correct permissions
-                if temp_resolved_conf.exists(): temp_resolved_conf.unlink() # Remove temp file
-
-                con.print_info("Restarting systemd-resolved to apply DNS changes...")
-                system_utils.run_command(["sudo", "systemctl", "restart", "systemd-resolved.service"], print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
-                system_utils.run_command(["sudo", "resolvectl", "flush-caches"], print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger) # Also flush caches
-                con.print_success("systemd-resolved configuration updated for DNS.")
-            else:
-                 con.print_info(f"No changes required for systemd-resolved DNS configuration in {SYSTEMD_RESOLVED_CONF_PATH}.")
-            return True
-        except Exception as e: 
-            con.print_error(f"Failed to configure systemd-resolved via {SYSTEMD_RESOLVED_CONF_PATH}: {e}")
-            app_logger.error(f"Error configuring systemd-resolved: {e}", exc_info=True)
-            if 'temp_resolved_conf' in locals() and temp_resolved_conf.exists(): #type: ignore
-                try: temp_resolved_conf.unlink() #type: ignore
-                except OSError: pass
-            return False
-    
-    # Fallback if systemd-resolved is not clearly active or its configuration failed
-    con.print_info(f"systemd-resolved not detected or its configuration failed. Checking {RESOLV_CONF_PATH} for NetworkManager hints.")
+    # Check systemd-resolved service status
+    service_active = False
     try:
-        resolv_content_fallback = ""
-        if RESOLV_CONF_PATH.exists(): 
-            resolv_content_fallback = RESOLV_CONF_PATH.read_text(encoding='utf-8')
+        status_proc = system_utils.run_command(
+            ["systemctl", "is-active", "systemd-resolved.service"],
+            capture_output=True, check=False, print_fn_info=None, logger=app_logger
+        )
+        if status_proc.returncode == 0 and status_proc.stdout.strip() == "active":
+            service_active = True
+            app_logger.info("systemd-resolved.service is active.")
+        else:
+            app_logger.info("systemd-resolved.service is not active or not found via systemctl.")
+    except (FileNotFoundError, subprocess.CalledProcessError) as e:
+        app_logger.info(f"systemctl command not found or failed for systemd-resolved check: {e}")
 
-        if "NetworkManager" in resolv_content_fallback: 
-            con.print_warning(f"{RESOLV_CONF_PATH} seems to be managed by NetworkManager.")
-            con.print_info("Automatic DNS configuration for NetworkManager is complex for a generic script and can be connection-specific.")
-            con.print_info("If you use NetworkManager, please configure DNS manually via its settings (e.g., nm-connection-editor or nmtui),")
-            con.print_info(f"or using nmcli for your active connection(s). Example for 'Wired connection 1':")
-            con.print_info(f"  sudo nmcli con mod \"Wired connection 1\" ipv4.dns \"{GOOGLE_DNS_IPV4[0]} {GOOGLE_DNS_IPV4[1]}\"")
-            con.print_info(f"  sudo nmcli con mod \"Wired connection 1\" ipv6.dns \"{GOOGLE_DNS_IPV6[0]} {GOOGLE_DNS_IPV6[1]}\"")
-            con.print_info(f"  sudo nmcli con mod \"Wired connection 1\" ipv4.ignore-auto-dns yes ipv6.ignore-auto-dns yes") # Important
-            con.print_info(f"  sudo nmcli con up \"Wired connection 1\"  # Reactivate to apply")
-            return True # Non-fatal, user informed to take manual action.
+    # Consider systemd-resolved "active" for our purposes if either the symlink points to it
+    # OR the service is explicitly active. The symlink is a strong indicator of management.
+    if systemd_managed_symlink:
+        # If symlinked, we should definitely try to use systemd-resolved,
+        # even if the service status check had an issue (e.g. systemctl not in minimal env)
+        # but we still log the service status for diagnostics.
+        app_logger.info(f"Detected systemd-managed symlink for {RESOLV_CONF_PATH}. Proceeding with systemd-resolved logic.")
+        return True # Prioritize symlink indication
+    
+    # If not symlinked, then rely on service status
+    if service_active:
+        app_logger.info(f"{RESOLV_CONF_PATH} not a clear systemd symlink, but service is active. Proceeding with systemd-resolved logic.")
+        return True
+        
+    app_logger.info("systemd-resolved does not appear to be actively managing DNS.")
+    return False
+
+
+def _configure_systemd_resolved(dns_ipv4: list, dns_ipv6: list) -> bool:
+    """Configures systemd-resolved via /etc/systemd/resolved.conf."""
+    con.print_info(f"Attempting to configure DNS via {SYSTEMD_RESOLVED_CONF_PATH}.")
+    
+    if not SYSTEMD_RESOLVED_CONF_PATH.exists():
+        con.print_info(f"{SYSTEMD_RESOLVED_CONF_PATH} does not exist. Attempting to create it.")
+        try:
+            system_utils.run_command(
+                f"sudo mkdir -p {shlex.quote(str(SYSTEMD_RESOLVED_CONF_PATH.parent))} && "
+                f"echo '[Resolve]' | sudo tee {shlex.quote(str(SYSTEMD_RESOLVED_CONF_PATH))} > /dev/null",
+                shell=True, check=True, print_fn_info=con.print_info, logger=app_logger
+            )
+        except Exception as e_create:
+            con.print_error(f"Failed to create {SYSTEMD_RESOLVED_CONF_PATH}: {e_create}")
+            app_logger.error(f"Creation of {SYSTEMD_RESOLVED_CONF_PATH} failed: {e_create}", exc_info=True)
+            return False
+
+    system_utils.backup_system_file(
+        SYSTEMD_RESOLVED_CONF_PATH, sudo_required=True, logger=app_logger,
+        print_fn_info=con.print_info, print_fn_warning=con.print_warning
+    )
+
+    temp_resolved_conf = None # Initialize for finally block
+    try:
+        import configparser
+        parser = configparser.ConfigParser(comment_prefixes=('#', ';'), allow_no_value=True, strict=False)
+        
+        read_proc = system_utils.run_command(
+            ["sudo", "cat", str(SYSTEMD_RESOLVED_CONF_PATH)],
+            capture_output=True, check=True, print_fn_info=None, logger=app_logger
+        )
+        parser.read_string(read_proc.stdout)
+
+        if not parser.has_section("Resolve"):
+            parser.add_section("Resolve")
+
+        changes_made = False
+        # Combine IPv4 and IPv6, systemd-resolved takes space-separated list for DNS=
+        combined_dns_servers_list = []
+        for ip in dns_ipv4 + dns_ipv6: # Prioritize IPv4 from config, then IPv6
+            if ip not in combined_dns_servers_list: # Avoid duplicates
+                combined_dns_servers_list.append(ip)
+        dns_servers_str = " ".join(combined_dns_servers_list)
+        
+        if not dns_servers_str:
+             app_logger.warning("No DNS servers provided to _configure_systemd_resolved. DNS field will be empty if not already set.")
+             # Allow setting empty if that's what's passed, though _configure_dns usually provides defaults.
+
+        current_dns_in_config = parser.get("Resolve", "DNS", fallback="").strip()
+        if current_dns_in_config != dns_servers_str:
+            parser.set("Resolve", "DNS", dns_servers_str)
+            changes_made = True
+            app_logger.info(f"Setting DNS in {SYSTEMD_RESOLVED_CONF_PATH} to: '{dns_servers_str}'")
+        
+        domains_setting = "~."
+        if parser.get("Resolve", "Domains", fallback="") != domains_setting:
+            parser.set("Resolve", "Domains", domains_setting)
+            changes_made = True
+            app_logger.info(f"Setting Domains in {SYSTEMD_RESOLVED_CONF_PATH} to: {domains_setting}")
+
+        if changes_made:
+            con.print_info(f"Updating DNS settings in {SYSTEMD_RESOLVED_CONF_PATH}...")
+            temp_resolved_conf = Path(f"/tmp/resolved_conf_new_{os.getpid()}_{int(time.time())}.conf")
+            with open(temp_resolved_conf, 'w', encoding='utf-8') as f_write:
+                parser.write(f_write, space_around_delimiters=False)
+            
+            system_utils.run_command(["sudo", "cp", str(temp_resolved_conf), str(SYSTEMD_RESOLVED_CONF_PATH)], print_fn_info=con.print_info, logger=app_logger)
+            system_utils.run_command(["sudo", "chown", "root:systemd-resolve", str(SYSTEMD_RESOLVED_CONF_PATH)], print_fn_info=con.print_info, logger=app_logger)
+            system_utils.run_command(["sudo", "chmod", "644", str(SYSTEMD_RESOLVED_CONF_PATH)], print_fn_info=con.print_info, logger=app_logger)
+            
+            con.print_info("Restarting systemd-resolved to apply DNS changes...")
+            system_utils.run_command(["sudo", "systemctl", "restart", "systemd-resolved.service"], print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
+            system_utils.run_command(["sudo", "resolvectl", "flush-caches"], print_fn_info=con.print_info, print_fn_error=con.print_error, logger=app_logger)
+            con.print_success("systemd-resolved configuration updated for DNS.")
+        else:
+            con.print_info(f"No changes required for systemd-resolved DNS configuration in {SYSTEMD_RESOLVED_CONF_PATH}.")
+        return True
     except Exception as e:
-        app_logger.warning(f"Error checking {RESOLV_CONF_PATH} for NetworkManager: {e}")
-        # Continue to direct /etc/resolv.conf modification attempt
-        pass
+        con.print_error(f"Failed to configure systemd-resolved via {SYSTEMD_RESOLVED_CONF_PATH}: {e}")
+        app_logger.error(f"Error configuring systemd-resolved: {e}", exc_info=True)
+        return False
+    finally:
+        if temp_resolved_conf and temp_resolved_conf.exists():
+            try:
+                temp_resolved_conf.unlink()
+            except OSError as e_unlink:
+                app_logger.warning(f"Failed to remove temporary file {temp_resolved_conf}: {e_unlink}")
 
+
+def _handle_network_manager_warning(dns_ipv4_list: list, dns_ipv6_list: list) -> None:
+    """Prints informational messages about NetworkManager managing /etc/resolv.conf."""
+    con.print_warning(f"{RESOLV_CONF_PATH} seems to be managed by NetworkManager.")
+    con.print_info("Automatic DNS configuration for NetworkManager is complex for a generic script and can be connection-specific.")
+    con.print_info("If you use NetworkManager, please configure DNS manually via its settings (e.g., nm-connection-editor or nmtui),")
+    con.print_info(f"or using nmcli for your active connection(s). Example for 'Wired connection 1':")
+    
+    # Construct example strings, handling cases where lists might be empty
+    ipv4_example_dns = " ".join(dns_ipv4_list) if dns_ipv4_list else "8.8.8.8 8.8.4.4" # Default if empty
+    ipv6_example_dns = " ".join(dns_ipv6_list) if dns_ipv6_list else "2001:4860:4860::8888 2001:4860:4860::8844"
+
+    con.print_info(f"  sudo nmcli con mod \"Wired connection 1\" ipv4.dns \"{ipv4_example_dns}\"")
+    con.print_info(f"  sudo nmcli con mod \"Wired connection 1\" ipv6.dns \"{ipv6_example_dns}\"")
+    con.print_info(f"  sudo nmcli con mod \"Wired connection 1\" ipv4.ignore-auto-dns yes ipv6.ignore-auto-dns yes")
+    con.print_info(f"  sudo nmcli con up \"Wired connection 1\"  # Reactivate to apply")
+    app_logger.info("NetworkManager hint found in /etc/resolv.conf. Advised user to configure via NM tools.")
+
+
+def _configure_direct_resolv_conf(dns_ipv4: list, dns_ipv6: list) -> bool:
+    """Directly modifies /etc/resolv.conf."""
     con.print_warning(f"Fallback: Attempting to directly modify {RESOLV_CONF_PATH} (might be overwritten by system).")
     system_utils.backup_system_file(
-        RESOLV_CONF_PATH, 
-        sudo_required=True, 
-        logger=app_logger,
-        print_fn_info=con.print_info,
-        print_fn_warning=con.print_warning
+        RESOLV_CONF_PATH, sudo_required=True, logger=app_logger,
+        print_fn_info=con.print_info, print_fn_warning=con.print_warning
     )
     
-    lines_to_add_to_resolv = []
-    current_resolv_text_fallback = ""
-    if RESOLV_CONF_PATH.exists(): 
+    new_nameserver_lines = []
+    for ip in dns_ipv4 + dns_ipv6: # Prioritize IPv4, then IPv6
+        if ip: # Ensure IP is not empty
+             new_nameserver_lines.append(f"nameserver {ip}")
+
+    if not new_nameserver_lines:
+        con.print_warning(f"No valid DNS servers provided to write to {RESOLV_CONF_PATH}. Skipping direct modification.")
+        app_logger.warning(f"Direct resolv.conf modification skipped: no DNS servers to write.")
+        return True # No action taken, not an error in itself.
+
+    current_resolv_text = ""
+    if RESOLV_CONF_PATH.exists():
         try:
-            # Reading /etc/resolv.conf might not need sudo, but writing does.
-            # If it's a symlink to systemd, it's often readable. Direct file also.
-            current_resolv_text_fallback = RESOLV_CONF_PATH.read_text(encoding='utf-8')
+            current_resolv_text = RESOLV_CONF_PATH.read_text(encoding='utf-8')
         except Exception as e:
             con.print_error(f"Could not read {RESOLV_CONF_PATH} for modification: {e}")
             app_logger.error(f"Failed to read {RESOLV_CONF_PATH}: {e}", exc_info=True)
-            return False
+            # Proceeding might overwrite, but backup was attempted.
+            # If read fails, we can't preserve other settings.
 
-    for dns_ip in GOOGLE_DNS_IPV4 + GOOGLE_DNS_IPV6:
-        entry = f"nameserver {dns_ip}"
-        if entry not in current_resolv_text_fallback: 
-            lines_to_add_to_resolv.append(entry)
+    # Filter existing lines: keep non-nameserver lines and nameservers not in our new list.
+    existing_lines_to_keep = []
+    for line in current_resolv_text.splitlines():
+        line_strip = line.strip()
+        if line_strip.startswith("#"): # Keep comments
+            existing_lines_to_keep.append(line_strip)
+        elif "nameserver" in line_strip:
+            # Check if this existing nameserver is one of the new ones we're adding
+            # Avoids duplicates if script is re-run or if some were already there.
+            # A simple check: if the IP part of the line is in our new combined list.
+            try:
+                existing_ip = line_strip.split()[1]
+                if existing_ip not in (dns_ipv4 + dns_ipv6):
+                    existing_lines_to_keep.append(line_strip)
+            except IndexError: # Malformed nameserver line
+                existing_lines_to_keep.append(line_strip) # Keep it as is
+        elif line_strip: # Keep other non-empty, non-comment lines (e.g., search, options)
+            existing_lines_to_keep.append(line_strip)
+
+    # Prepend new nameservers, then add the filtered existing lines.
+    # Limit total nameservers (e.g., to 6) to avoid issues.
+    final_content_lines = []
+    nameserver_count = 0
+    for line in new_nameserver_lines: # Add our new/default DNS servers first
+        if nameserver_count < 6:
+            final_content_lines.append(line)
+            nameserver_count +=1
     
-    if lines_to_add_to_resolv:
-        try:
-            content_to_add = "\n".join(lines_to_add_to_resolv) + "\n"
-            
-            cleaned_existing_content_lines = [
-                line for line in current_resolv_text_fallback.splitlines()
-                if not any(google_ip in line for google_ip in GOOGLE_DNS_IPV4 + GOOGLE_DNS_IPV6)
-            ]
-            # Prepend new nameservers to give them priority
-            new_content = content_to_add + "\n".join(cleaned_existing_content_lines).strip() + "\n"
+    for line in existing_lines_to_keep: # Add other relevant lines from existing config
+        if line.startswith("nameserver"):
+            if nameserver_count < 6:
+                final_content_lines.append(line)
+                nameserver_count += 1
+        else: # Non-nameserver lines (search, options, comments)
+            final_content_lines.append(line)
 
-            # Write the new content using sudo tee (overwrite)
-            cmd_write_resolv = f"echo -e {shlex.quote(new_content.strip())} | sudo tee {shlex.quote(str(RESOLV_CONF_PATH))} > /dev/null"
-            system_utils.run_command(cmd_write_resolv, shell=True, check=True, print_fn_info=con.print_info, logger=app_logger)
-            con.print_success(f"DNS entries updated in {RESOLV_CONF_PATH}. System may overwrite this if not using systemd-resolved.")
-        except Exception as e_direct_write: 
-            con.print_error(f"Failed to directly write to {RESOLV_CONF_PATH}: {e_direct_write}")
-            app_logger.error(f"Direct write to {RESOLV_CONF_PATH} failed: {e_direct_write}", exc_info=True)
-            return False
+    # Remove exact duplicate lines while preserving order (simple list comprehension)
+    final_content_lines_ordered_unique = []
+    for line in final_content_lines:
+        if line not in final_content_lines_ordered_unique:
+            final_content_lines_ordered_unique.append(line)
+            
+    if not any(line.startswith("nameserver") for line in final_content_lines_ordered_unique):
+        con.print_warning(f"After processing, no nameserver entries would be written to {RESOLV_CONF_PATH}. Skipping modification.")
+        app_logger.warning("Direct /etc/resolv.conf modification skipped: no nameservers to write after filtering.")
+        return True
+
+    try:
+        new_content = "\n".join(final_content_lines_ordered_unique).strip() + "\n" # Ensure single trailing newline
+        cmd_write_resolv = f"echo -e {shlex.quote(new_content)} | sudo tee {shlex.quote(str(RESOLV_CONF_PATH))} > /dev/null"
+        system_utils.run_command(cmd_write_resolv, shell=True, check=True, print_fn_info=con.print_info, logger=app_logger)
+        con.print_success(f"DNS entries updated in {RESOLV_CONF_PATH}. System may overwrite this if not using systemd-resolved.")
+        return True
+    except Exception as e_direct_write:
+        con.print_error(f"Failed to directly write to {RESOLV_CONF_PATH}: {e_direct_write}")
+        app_logger.error(f"Direct write to {RESOLV_CONF_PATH} failed: {e_direct_write}", exc_info=True)
+        return False
+
+# --- Main DNS Orchestrator ---
+def _configure_dns(app_config: dict) -> bool: # Added app_config back
+    """Configures system DNS, preferring systemd-resolved, then attempting /etc/resolv.conf."""
+    con.print_sub_step("Configuring DNS...")
+    app_logger.info("Starting DNS configuration.")
+
+    # Extract DNS servers from app_config, defaulting to Google's if not provided
+    # This part remains in the orchestrator as it deals with app_config.
+    dns_ipv4 = app_config.get("dns_servers", {}).get("ipv4", []) + GOOGLE_DNS_IPV4 # Ensure defaults are appended if list from config
+    dns_ipv6 = app_config.get("dns_servers", {}).get("ipv6", []) + GOOGLE_DNS_IPV6
+    
+    # Remove duplicates while preserving order (from config first, then defaults)
+    dns_ipv4 = sorted(set(dns_ipv4), key=dns_ipv4.index)
+    dns_ipv6 = sorted(set(dns_ipv6), key=dns_ipv6.index)
+    
+    if not dns_ipv4 and not dns_ipv6: # Check if, after processing, we have any DNS servers
+        con.print_warning("No DNS servers specified in config and defaults are also missing/empty. Skipping DNS configuration.")
+        app_logger.warning("DNS configuration skipped: no DNS servers available after processing config and defaults.")
+        return True # Not an error, but a skip.
+        
+    app_logger.info(f"Effective DNS servers to be used - IPv4: {dns_ipv4}, IPv6: {dns_ipv6}")
+
+    if _is_systemd_resolved_active():
+        app_logger.info("systemd-resolved appears active. Attempting configuration via systemd-resolved.")
+        if _configure_systemd_resolved(dns_ipv4, dns_ipv6):
+            return True
+        else:
+            con.print_warning("systemd-resolved configuration failed. Will check for NetworkManager or attempt direct /etc/resolv.conf modification as fallback.")
+            app_logger.warning("systemd-resolved configuration failed. Fallback initiated.")
     else:
-        con.print_info(f"Google DNS entries already seem present in {RESOLV_CONF_PATH}.")
-    return True
+        app_logger.info("systemd-resolved does not appear to be the primary DNS manager.")
+
+    # --- Fallback or Non-systemd-resolved Path ---
+    app_logger.info(f"Checking {RESOLV_CONF_PATH} for NetworkManager hints before direct modification.")
+    try:
+        # We only show the NetworkManager warning if /etc/resolv.conf is NOT a symlink
+        # managed by systemd-resolved. If _is_systemd_resolved_active() returned false because
+        # it's not a symlink (even if service was running), then it's safe to check for NM.
+        # If _is_systemd_resolved_active() was true but _configure_systemd_resolved failed,
+        # it's less likely NM is the primary if it's a systemd symlink.
+        
+        resolv_is_systemd_symlink = False
+        if RESOLV_CONF_PATH.is_symlink():
+            link_target = os.readlink(RESOLV_CONF_PATH)
+            if "systemd" in link_target or "resolved" in link_target or "stub-resolv.conf" in link_target:
+                resolv_is_systemd_symlink = True
+        
+        if not resolv_is_systemd_symlink: # Only proceed with NM check if not a systemd symlink
+            resolv_content = RESOLV_CONF_PATH.read_text(encoding='utf-8') if RESOLV_CONF_PATH.exists() else ""
+            if "NetworkManager" in resolv_content:
+                _handle_network_manager_warning(dns_ipv4, dns_ipv6) # Pass DNS lists for example message
+                return True # User informed, considered successful for this script's scope.
+        else:
+            app_logger.info(f"{RESOLV_CONF_PATH} is a systemd symlink; skipping NetworkManager check for direct modification fallback.")
+            
+    except Exception as e_nm_check:
+        app_logger.warning(f"Error checking {RESOLV_CONF_PATH} for NetworkManager: {e_nm_check}. Proceeding with direct modification attempt.")
+
+    # Attempt direct modification if not handled by systemd-resolved or NetworkManager hint path
+    return _configure_direct_resolv_conf(dns_ipv4, dns_ipv6)
+
 
 def _configure_dnf_performance() -> bool:
     """Configures DNF settings in /etc/dnf/dnf.conf for performance."""
@@ -483,7 +592,7 @@ def run_phase1(app_config: dict) -> bool:
     if critical_success: 
         con.print_info("\nStep 4: Configuring DNS...")
         app_logger.info("Phase 1, Step 4: Configuring DNS.")
-        if not _configure_dns():
+        if not _configure_dns(app_config):
             con.print_error("DNS configuration encountered issues. Network operations might fail or be slow.")
             app_logger.error("DNS configuration failed in Phase 1.")
             critical_success = False # DNS is fairly critical
