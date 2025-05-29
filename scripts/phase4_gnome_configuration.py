@@ -43,6 +43,7 @@ def _install_git_extension_direct_move(
     # Subdirectory within the cloned repo that actually contains the extension files (e.g., "extension_files/")
     extension_source_subdir_in_clone = ext_cfg.get("extension_source_subdir", "") 
     uuid = ext_cfg.get("uuid") or ext_cfg.get("uuid_to_enable") # UUID is the destination directory name
+    build_handles_install = ext_cfg.get("build_handles_install", False)
 
     if not git_url:
         con.print_error(f"Missing 'url' for Git-based extension '{name}'. Skipping installation.")
@@ -69,7 +70,8 @@ def _install_git_extension_direct_move(
     try:
         # Create a unique temporary directory for cloning.
         # Prefer user's .cache, fallback to system /tmp. Run mktemp as the user.
-        temp_parent_dir_name_prefix = f"gnome_ext_clone_{ext_key}_{os.getpid()}_{int(time.time())}"
+        sanitized_ext_key = ext_key.replace(" ", "_")
+        temp_parent_dir_name_prefix = f"gnome_ext_clone_{sanitized_ext_key}_{os.getpid()}_{int(time.time())}"
         user_cache_dir_abs = target_user_home / ".cache"
         
         # Ensure user's .cache directory exists (quietly)
@@ -132,11 +134,36 @@ def _install_git_extension_direct_move(
                 print_fn_info=con.print_info, print_fn_sub_step=con.print_sub_step, logger=app_logger
             )
             app_logger.info(f"Build command '{processed_build_command}' completed for '{name}' as user '{target_user}'.")
+
+            if build_handles_install: # Check the new flag
+                app_logger.info(f"Extension '{name}' build command is expected to handle installation. Verifying final destination.")
+                final_metadata_path = final_extension_dest_path_abs / 'metadata.json'
+                check_final_metadata_cmd = f"test -f {shlex.quote(str(final_metadata_path))}"
+                
+                # Use a try-except block for this check to ensure cleanup if something goes wrong
+                try:
+                    metadata_exists_at_dest_proc = system_utils.run_command(
+                        check_final_metadata_cmd, run_as_user=target_user, shell=True,
+                        check=False, capture_output=True, logger=app_logger, print_fn_info=None
+                    )
+                    if metadata_exists_at_dest_proc.returncode == 0:
+                        con.print_success(f"Extension '{name}' (UUID: {uuid}) successfully installed by its build command to '{final_extension_dest_path_abs}'.")
+                        app_logger.info(f"Extension '{name}' (UUID: {uuid}) verified at final destination after build_handles_install.")
+                        # temp_clone_parent_dir_obj will be cleaned up in the 'finally' block of the main try-except
+                        return True # Installation successful
+                    else:
+                        con.print_error(f"'metadata.json' not found in final destination '{final_metadata_path}' after build_handles_install for extension '{name}'. Build command may have failed to install correctly.")
+                        app_logger.error(f"metadata.json missing in final destination for '{name}' after build_handles_install: {final_metadata_path}")
+                        return False # Installation failed
+                except Exception as e_verify:
+                    con.print_error(f"Error verifying installation for '{name}' at final destination: {e_verify}")
+                    app_logger.error(f"Error verifying final installation for '{name}': {e_verify}", exc_info=True)
+                    return False
         else:
             app_logger.info(f"No build command specified for '{name}'.")
 
+        # If build_handles_install is False, or no build command was run, proceed with original logic:
         # Determine the actual source path of extension files within the clone
-        # (could be the root of the clone, or a subdirectory)
         effective_extension_source_path_abs = cloned_repo_path_in_temp_abs
         if extension_source_subdir_in_clone:
             effective_extension_source_path_abs = cloned_repo_path_in_temp_abs / extension_source_subdir_in_clone

@@ -112,7 +112,8 @@
         "url": "https://github.com/vchlum/wireless-hid.git",
         "name": "Wireless HID",
         "uuid": "wireless-hid@chlumskyvaclav.gmail.com",
-        "build_command": "make build && make install"
+        "build_command": "make build && make install",
+        "build_handles_install": true
       }
     }
   },
