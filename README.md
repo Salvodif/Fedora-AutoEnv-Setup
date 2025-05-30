@@ -1,7 +1,26 @@
+# Fedora AutoEnv Setup 🚀✨
+
 ![Logo](assets/logo.png)
 
 <div align="center">
-# Fedora AutoEnv Setup 🚀✨
+     <p align="center">
+    <a href="https://www.python.org/downloads/">
+      <img src="https://img.shields.io/badge/python-3.x-blue.svg" alt="Python Version">
+    </a>
+    <a href="LICENSE">
+      <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
+    </a>
+    <a href="https://github.com/salvodif/Fedora-AutoEnv-Setup/stargazers">
+      <img src="https://img.shields.io/github/stars/salvodif/TomeTrove?style=social" alt="GitHub Stars">
+    </a>
+    <a href="https://github.com/salvodif/Fedora-AutoEnv-Setup/issues">
+      <img src="https://img.shields.io/github/issues/salvodif/TomeTrove" alt="GitHub Issues">
+    </a>
+    <a href="https://github.com/salvodif/Fedora-AutoEnv-Setup/network/members">
+      <img src="https://img.shields.io/github/forks/salvodif/TomeTrove?style=social" alt="GitHub Forks">
+    </a>
+  </p>
+
 </div>
 
 `Fedora-AutoEnv-Setup` is a Python-based automation tool designed to streamline the post-installation setup and configuration of a Fedora Linux environment. It empowers users to define and execute a series of setup phases, installing packages, configuring system settings, and setting up user-specific enhancements in an orderly, repeatable, and customizable manner.
