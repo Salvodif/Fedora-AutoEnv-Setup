@@ -1,3 +1,4 @@
+![Logo](assets/logo.png)
 # Fedora AutoEnv Setup 🚀✨
 
 `Fedora-AutoEnv-Setup` is a Python-based automation tool designed to streamline the post-installation setup and configuration of a Fedora Linux environment. It empowers users to define and execute a series of setup phases, installing packages, configuring system settings, and setting up user-specific enhancements in an orderly, repeatable, and customizable manner.
@@ -26,11 +27,14 @@ Fedora-AutoEnv-Setup/
 ├── 📁 scripts/ # Contains scripts for individual phases and utilities
 │ ├── 🛠️ config_loader.py # Utility to load packages.json
 │ ├── ✨ console_output.py # Utility for styled terminal output using Rich
+│ ├── 📜 logger_utils.py # Utility for application logging
 │ ├── ⚙️ system_utils.py # Utility for running system commands
 │ ├── 1️⃣ phase1_system_preparation.py # Logic for Phase 1
 │ ├── 2️⃣ phase2_basic_installation.py # Logic for Phase 2
 │ ├── 3️⃣ phase3_terminal_enhancement.py # Logic for Phase 3
-│ └── ... # (Other phase scripts as developed)
+│ ├── 🎨 phase4_gnome_configuration.py # Logic for Phase 4
+│ ├── 🎮 phase5_nvidia_installation.py # Logic for Phase 5
+│ ├── 🧩 phase6_additional_packages.py # Logic for Phase 6
 └── 📖 README.md # This file (You are here!)
 ```
 
@@ -49,31 +53,37 @@ Fedora-AutoEnv-Setup/
 
 ## 🔧 Configuration (`packages.json`)
 
-The `packages.json` file is the heart ❤️ of `Fedora-AutoEnv-Setup`. This YAML file dictates precisely what actions are performed in each setup phase.
+The `packages.json` file is the heart ❤️ of `Fedora-AutoEnv-Setup`. This JSON file dictates precisely what actions are performed in each setup phase.
 
 **Example Snippet:**
-```yaml
-# --- Phase 1: System Preparation ---
-phase1_system_preparation:
-  dnf_packages:
-    - "dnf5"
-    - "dnf5-plugins"
-
-# --- Phase 2: Basic System Package Configuration ---
-phase2_basic_configuration:
-  dnf_packages:
-    - "git"
-    - "curl"
-    - "zsh"
-  # ... other package types (e.g., dnf_groups_multimedia) and configurations ...
-
-# --- Phase 3: Terminal Enhancement ---
-phase3_terminal_enhancement:
-  # Key-value pairs where the value is a command string to be executed.
-  # These commands are run as the target user.
-  atuin_install: "cargo install atuin"
-  zsh_autosuggestions_clone: "git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"
-  # ... other terminal tools and Zsh plugins ...
+```json
+{
+  "phase1_system_preparation": {
+    "dnf_packages": [
+      "dnf5",
+      "dnf5-plugins"
+    ]
+  },
+  "phase2_basic_configuration": {
+    "dnf_packages": [
+      "git",
+      "curl",
+      "zsh"
+    ],
+    "dnf_swap_ffmpeg": {
+      "from": "ffmpeg-free",
+      "to": "ffmpeg"
+    },
+    "nerd_fonts_to_install": {
+        "Hack": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/Hack.zip"
+    }
+  },
+  "phase3_terminal_enhancement": {
+    "omz": "sh -c \"$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh) --unattended\"",
+    "atuin_install": "cargo install atuin",
+    "zsh_autosuggestions_clone": "git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions"
+  }
+}
 ```
 
   You can (and should!) customize this file extensively to match your desired setup – add or remove packages, define different commands, or even structure entirely new phases.
@@ -139,15 +149,28 @@ During `Phase 3: Terminal Enhancement`, these files will be automatically copied
     *   Manages the `install_status.json` file, which diligently tracks the completion status of each individual phase. This enables resuming setups or selectively re-running parts.
     *   Presents the interactive Text User Interface (TUI) menu, guiding the user smoothly through the available setup options.
     *   Upon user selection, it invokes the appropriate handler function for the chosen phase (these handlers are mapped within `install.py`'s central `PHASES` dictionary) and smartly passes it the global application configuration (which was loaded from `packages.json`).
-*   **`scripts/config_loader.py` (The YAML Whisperer 🤫):**
-    *   Its sole, focused responsibility is to load and parse the `packages.json` file, transforming its structured data into a readily usable Python dictionary for the rest of the application.
+*   **`scripts/config_loader.py` (The Config Guardian 🤫):**
+    *   Loads and parses the main configuration file, `packages.json`, which defines all phases, packages, and commands.
+    *   Searches for `packages.json` first in the project root directory, then in the current working directory.
+    *   Handles errors like file not found or JSON parsing issues gracefully, returning an empty configuration if problems occur.
+    *   Provides `get_phase_data` to extract specific phase configurations.
 *   **`scripts/console_output.py` (The Visual Artist ✨):**
-    *   Provides a convenient and powerful wrapper around the `rich` library. This ensures all terminal output is not just functional but also beautifully styled, clear, and consistent. It offers distinct visual cues for different message types: informational ℹ️, warnings ⚠️, errors ❌, and step progression ➡️.
-*   **`scripts/system_utils.py` (The Command Master ⚙️):**
-    *   A vital collection of essential utility functions, with `run_command` as its flagship. This function serves as a robust and flexible wrapper around Python's `subprocess.run` module, specifically designed for executing shell commands with enhanced capabilities:
-        *   Seamlessly running commands under the context of a different user (via `sudo -Hn -u <user> bash -c "COMMAND"`).
-        *   Flexibly capturing command output for later inspection or live-streaming it directly to the console.
-        *   Comprehensive error checking and user-friendly reporting to aid in troubleshooting.
+    *   Wraps the `rich` library to provide clear, styled, and interactive terminal output.
+    *   Offers functions for various message types (info ℹ️, warning ⚠️, error ❌, success ✅), section formatting (`print_step`, `print_sub_step`, `print_panel`, `print_rule`), and user interaction (`ask_question`, `confirm_action`).
+*   **`scripts/logger_utils.py` (The Log Keeper 📜):**
+    *   Responsible for setting up and configuring the application-wide logger (`app_logger`).
+    *   Provides centralized log formatting, file logging (to `fedora_autoenv_setup.log`), and optional console logging.
+    *   Ensures consistent logging behavior across all modules of the application.
+*   **`scripts/system_utils.py` (The System Toolkit 🛠️):**
+    *   Provides a comprehensive suite of utility functions for system interactions.
+    *   Core function `run_command` executes shell commands with options for running as a specific user (via `sudo -Hn -u <user> bash -c "COMMAND"`), capturing output, and robust error handling.
+    *   Includes helpers for user and environment information: `get_target_user` (determines the non-root user, often `SUDO_USER`), `get_user_home_dir`.
+    *   Manages files and directories: `backup_system_file`, `ensure_dir_exists`.
+    *   Handles user shell management: `get_user_shell`, `ensure_shell_in_etc_shells`, `set_default_shell`.
+    *   Wraps package manager operations:
+        *   DNF: `install_dnf_packages`, `install_dnf_groups`, `swap_dnf_packages`, `upgrade_system_dnf`, `clean_dnf_cache`, `is_package_installed_rpm`.
+        *   Pip: `install_pip_packages` (user and system-wide).
+        *   Flatpak: `ensure_flathub_remote_exists`, `install_flatpak_apps`.
 *   **Phase-Specific Scripts (`scripts/phase<N>_*.py`) (The Dedicated Workers 🧩):**
     *   Each of these Python scripts diligently encapsulates all the specialized logic required for a particular setup phase (e.g., `phase1_system_preparation.py` handles initial system readiness).
     *   They typically expose a main `run_phase<N>(app_config)` function, which acts as the designated entry point called by the `install.py` orchestrator.
@@ -160,43 +183,53 @@ During `Phase 3: Terminal Enhancement`, these files will be automatically copied
 ### 🚀 Current Phases Implemented
 
 *   **Phase 1: System Preparation** ⚙️
-    *   Installs core DNF packages (e.g., `dnf5`, `flatpak` if specified).
-    *   Configures DNF for **performance** (`max_parallel_downloads`, `fastestmirror`).
-    *   Sets up **RPM Fusion** (free and non-free) repositories.
-    *   Configures DNS to use Google's public DNS servers (via `systemd-resolved` if active, or fallback).
-    *   Cleans DNF metadata and performs a full system update (`dnf upgrade -y`).
-    *   Sets up the **Flathub** repository system-wide for Flatpak.
+    *   Installs core DNF packages specified in `packages.json` (e.g., `dnf5`, `flatpak`).
+    *   Configures DNF for performance and behavior by setting `max_parallel_downloads`, `fastestmirror`, `defaultyes` (auto-yes for prompts), and `keepcache` in `dnf.conf`.
+    *   Sets up **RPM Fusion** (free and non-free) repositories automatically based on the detected Fedora version.
+    *   Configures system DNS using servers from `packages.json` or defaulting to Google Public DNS; handles `systemd-resolved` or direct `/etc/resolv.conf` modification.
+    *   Cleans DNF metadata (`dnf clean all`) and performs a full system update (`dnf upgrade -y`).
+    *   Ensures the **Flathub** Flatpak repository is set up system-wide.
     *   Allows interactive setting of the system **hostname**.
 *   **Phase 2: Basic System Package Configuration** 📦
-    *   Installs essential general DNF packages (e.g., `git`, `curl`, `zsh`, `python3-pip`).
-    *   Configures **media codecs**:
-        *   Installs DNF multimedia groups (e.g., `@multimedia`).
-        *   Swaps `ffmpeg-free` with the full `ffmpeg` from RPM Fusion.
-        *   Applies DNF group upgrade options for multimedia packages.
-        *   Installs DNF sound and video groups (e.g., `@sound-and-video`).
+    *   Installs essential general DNF packages specified in `packages.json` (e.g., `git`, `curl`, `unzip`, `fontconfig`).
+    *   Configures **media codecs** based on `packages.json`:
+        *   Swaps `ffmpeg-free` with the full `ffmpeg` from RPM Fusion if configured.
+        *   Installs specified DNF sound and video groups (e.g., `@multimedia`, `@sound-and-video`).
+    *   Installs specified Flatpak applications 📦 (system-wide) from `packages.json`.
+    *   Downloads and installs specified Nerd Fonts ✒️ to the target user's font directory (`~/.local/share/fonts`), then refreshes the font cache (`fc-cache -fv`).
 *   **Phase 3: Terminal Enhancement** 💻✨
-    *   Checks for Zsh installation and sets it as the **default shell** for the target user (typically `SUDO_USER`).
-    *   Installs user-defined terminal enhancement tools and Zsh plugins via shell commands (e.g., `atuin`, `eza`, `zoxide`, `zsh-autosuggestions`, `zsh-syntax-highlighting`) run as the target user.
-    *   Copies pre-configured `.zshrc` and `.nanorc` files to the target user's home directory, backing up existing ones.
+    *   Checks if Zsh is installed. If it is, but not the default shell, it prompts the user to set Zsh as **default** (using `chsh`). This step also ensures Zsh is listed in `/etc/shells`.
+    *   Installs **Oh My Zsh** if not already present, using the command specified by the `omz` key in `packages.json`. The script attempts a non-interactive install (setting `RUNZSH=no CHSH=no` for the OMZ installer).
+    *   Installs user-defined **Oh My Zsh plugins, themes, and other terminal tools** by executing shell commands from `packages.json`. These commands are run as the target user, with `$HOME` and `$ZSH_CUSTOM` variables substituted. Git clone commands for plugins may be skipped if the target directory already exists.
+    *   Copies pre-configured dotfiles to the target user's home directory, backing up existing ones:
+        *   `.zshrc` (from project's `zsh/` directory) is copied if Zsh is the default shell and Zsh enhancements are proceeding.
+        *   `.nanorc` (from project's `nano/` directory) is copied.
 *   **Phase 4: GNOME Configuration & Extensions** 🎨🖼️
-    *   Installs DNF packages relevant to GNOME (e.g., `gnome-tweaks`, `gnome-shell-extensions`).
-    *   Ensures `gnome-extensions-cli` is installed via `pip` for the target user.
-    *   Installs and enables **GNOME Shell Extensions** for the target user based on `packages.json`. Supports:
-        *   Extensions from `extensions.gnome.org` (EGO) via UUID or numerical ID.
-        *   Extensions from Git repositories via cloning and running a specified install script.
-    *   Installs specified Flatpak applications system-wide (e.g., GNOME Extension Manager).
+    *   Installs DNF packages relevant to GNOME (e.g., `gnome-tweaks`) as specified in `packages.json`.
+    *   Installs user-defined Pip packages (run as the target user) from `packages.json` (e.g., this *could* include `gnome-extensions-cli` if the user adds it).
+    *   Installs **GNOME Shell Extensions** of `type: "git"` defined in `packages.json`:
+        *   Clones the extension's Git repository.
+        *   Optionally runs a build command specified in the configuration.
+        *   Moves the extension files to the target user's `~/.local/share/gnome-shell/extensions/UUID/` directory.
+        *   **Note:** This process only *installs* the extension files. Enabling the extension requires manual user action (e.g., via the GNOME Extensions app/website or `gnome-extensions-cli` if installed separately).
+    *   Installs specified Flatpak applications system-wide from `packages.json` (e.g., GNOME Extension Manager, which can then be used to enable extensions).
+    *   Applies system-wide **Dark Mode** 🌙 by setting `org.gnome.desktop.interface color-scheme 'prefer-dark'` and `gtk-theme 'Adwaita-dark'` for the target user via GSettings.
 *   **Phase 5: NVIDIA Driver Installation** 🎮🖥️
     *   Prompts the user for **confirmation** before proceeding, warning about GPU compatibility.
-    *   Checks if NVIDIA drivers appear to be already installed.
-    *   Performs a system update (`dnf update -y`) and advises a **reboot** if the kernel was updated before driver installation.
-    *   Enables the RPM Fusion non-free **tainted** repository if configured.
-    *   Allows user selection between **standard proprietary** NVIDIA drivers or **open kernel module** drivers if both are configured.
+    *   Checks if NVIDIA drivers (standard `akmod-nvidia` or `akmod-nvidia-open`) appear to be already installed.
+    *   Performs a full system upgrade (`dnf upgrade -y`) and advises a **reboot** if the kernel was updated, before proceeding with driver installation.
+    *   Enables the RPM Fusion non-free **tainted** repository by installing the package specified in `packages.json`, if configured.
+    *   Allows user selection between **standard proprietary** NVIDIA drivers (from `dnf_packages_standard` list in config) or **open kernel module** drivers (via `dnf_swap_open_drivers` config) if both pathways are configured.
     *   Installs the chosen NVIDIA drivers (`akmod-nvidia` and `xorg-x11-drv-nvidia-cuda`, or swaps to/installs `akmod-nvidia-open`).
     *   Advises the user to **wait** for kernel modules to build and provides a command to check.
     *   Strongly recommends a system **REBOOT** to complete the driver installation.
 *   **Phase 6: Additional User Packages** 🧩🌐
-    *   Installs a list of additional **DNF packages** as specified in the configuration.
-    *   Installs a list of additional **Flatpak applications** (system-wide from Flathub) as specified in the configuration.
+    *   Installs a list of additional **DNF packages** as specified in `packages.json`.
+    *   Installs DNF packages requiring **custom repository configurations** 🛠️📦 as defined under `custom_repo_dnf_packages` in `packages.json`. For each such package, the script:
+        *   Optionally checks if a specified indicator package (via `check_if_installed_pkg`) is already present.
+        *   Executes a list of `repo_setup_commands` (e.g., to import GPG keys, add .repo files).
+        *   Installs the target DNF package (via `dnf_package_to_install`).
+    *   Installs a list of additional **Flatpak applications** (system-wide from Flathub by default) as specified in `packages.json`.
 
 ## 🙌 Contributing
 
