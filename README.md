@@ -1,5 +1,8 @@
 ![Logo](assets/logo.png)
+
+<div align="center">
 # Fedora AutoEnv Setup 🚀✨
+</div>
 
 `Fedora-AutoEnv-Setup` is a Python-based automation tool designed to streamline the post-installation setup and configuration of a Fedora Linux environment. It empowers users to define and execute a series of setup phases, installing packages, configuring system settings, and setting up user-specific enhancements in an orderly, repeatable, and customizable manner.
 
