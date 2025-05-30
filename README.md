@@ -125,7 +125,7 @@ During `Phase 3: Terminal Enhancement`, these files will be automatically copied
 1.  **📥 Clone the Repository:**
     Get the latest version of the project:
     ```bash
-    git clone <your-repository-url>
+    git clone https://github.com/Salvodif/Fedora-AutoEnv-Setup.git
     cd Fedora-AutoEnv-Setup
     ```
 
