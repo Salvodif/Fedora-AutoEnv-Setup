@@ -69,14 +69,6 @@
     },
     "set_dark_mode": true,
     "gnome_extensions": {
-      "quick-settings-tweaks": {
-        "type": "git",
-        "url": "https://github.com/qwreey/quick-settings-tweaks.git",
-        "name": "Quick Settings Tweaks",
-        "uuid": "quick-settings-tweaks@qwreey",
-        "build_command": "chmod +x install.sh; bash ./install.sh build && bash ./install.sh install",
-        "build_handles_install": true
-      },
       "just-perfection": {
         "type": "git",
         "url": "https://gitlab.gnome.org/jrahmatzadeh/just-perfection.git",
