@@ -137,7 +137,8 @@
       "p7zip-plugins",
       "xpad",
       "xboxdrv",
-      "libusb"
+      "libusb",
+      "steam"
     ],
     "custom_repo_dnf_packages": {
       "visual_studio_code": {
@@ -164,8 +165,18 @@
       "com.discordapp.Discord": "Discord (Chat)",
       "com.obsproject.Studio": "OBS Studio (Screen Recording/Streaming)",
       "org.zotero.Zotero": "Zotero",
-      "com.valvesoftware.Steam": "Steam",
       "com.vixalien.sticky": "Sticky Notes"
+    },
+    "custom_app_images": {
+      "lala": {
+        "name": "Lala",
+        "url": "https://github.com/wyyadd/LaLa/releases/download/v1.1.2/LaLa-1.1.2-linux-x86_64.AppImage",
+        "rename_to": "lala.AppImage",
+        "version": "1.1.2",
+        "comment": "A free and cross-platform trainers launcher for enhancing your gaming experience",
+        "categories": "Games;",
+        "icon_path": "$HOME/Applications/icons/lala.png"
+      }
     }
   }
 }

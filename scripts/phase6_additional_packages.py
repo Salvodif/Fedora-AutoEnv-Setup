@@ -1,10 +1,12 @@
 # Fedora-AutoEnv-Setup/scripts/phase6_additional_packages.py
 
 import sys
-import shlex 
-from pathlib import Path
-from typing import List, Dict, Any 
+import shlex
+import os
+import stat
 import subprocess # For CalledProcessError type hint if needed, though run_command handles
+from pathlib import Path
+from typing import List, Dict, Any, Optional # Added Optional
 
 # Adjust import path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -14,6 +16,166 @@ from scripts import system_utils
 from scripts.logger_utils import app_logger
 
 # --- Helper Functions ---
+
+def _generate_desktop_file_name(appimage_name: str) -> str:
+    """
+    Generates a .desktop file name from an AppImage file name.
+    Example: "lala.AppImage" -> "lala.desktop"
+             "MyApplication" -> "MyApplication.desktop"
+    """
+    if appimage_name.lower().endswith(".appimage"):
+        return appimage_name[:-len(".AppImage")] + ".desktop"
+    return appimage_name + ".desktop"
+
+def _install_custom_app_images(custom_app_images_config: Dict[str, Dict[str, Any]], logger: 'logging.Logger') -> bool: # type: ignore
+    """
+    Installs custom AppImages specified in the configuration.
+    Downloads, sets permissions, and creates .desktop files.
+    """
+    all_appimages_successful = True
+    if not custom_app_images_config: # Early exit if no config
+        logger.info("No custom AppImages to install.")
+        # con.print_info("No custom AppImages listed in configuration.") # Handled in run_phase6
+        return True
+
+    home_dir = Path.home()
+    apps_dir = home_dir / "Applications"
+    desktop_entries_dir = home_dir / ".local" / "share" / "applications"
+
+    try:
+        os.makedirs(apps_dir, exist_ok=True)
+        os.makedirs(desktop_entries_dir, exist_ok=True)
+        logger.debug(f"Ensured AppImage directories exist: {apps_dir}, {desktop_entries_dir}")
+    except OSError as e:
+        logger.error(f"Could not create required directories for AppImages: {e}", exc_info=True)
+        con.print_error(f"Error creating directories for AppImages: {e}")
+        return False # Cannot proceed without these directories
+
+    for app_key, app_data in custom_app_images_config.items():
+        logger.info(f"Processing custom AppImage: {app_key}")
+        con.print_sub_step(f"Processing custom AppImage: {app_data.get('name', app_key)}")
+
+        url = app_data.get('url')
+        rename_to = app_data.get('rename_to')
+
+        if not url or not rename_to:
+            logger.error(f"Missing 'url' or 'rename_to' for AppImage '{app_key}'. Skipping.")
+            con.print_error(f"Configuration error for AppImage '{app_key}': Missing 'url' or 'rename_to'. Skipping.")
+            all_appimages_successful = False
+            continue
+
+        app_image_path = apps_dir / rename_to
+        icon_path_str_from_config = app_data.get('icon_path', '') # Might be empty
+        icon_full_path_str = "" # Default to empty string for .desktop file if not provided/processed
+
+        if icon_path_str_from_config:
+            # Expanduser for potential ~ in icon_path
+            icon_full_path_str = os.path.expanduser(icon_path_str_from_config)
+            icon_dir = Path(icon_full_path_str).parent
+            if not icon_dir.exists():
+                logger.info(f"Creating icon directory: {icon_dir} for AppImage {app_key}")
+                try:
+                    os.makedirs(icon_dir, exist_ok=True)
+                except OSError as e_icon_dir:
+                    logger.warning(f"Could not create icon directory {icon_dir} for {app_key}: {e_icon_dir}. Icon might not be available.", exc_info=True)
+                    con.print_warning(f"Could not create icon directory {icon_dir} for {app_key}. Icon might not be available.")
+                    # Not critical enough to fail the whole appimage install, icon might be optional or pre-existing elsewhere
+
+        # --- Download AppImage ---
+        logger.info(f"Downloading AppImage {app_key} from {url} to {app_image_path}...")
+        # Use a more descriptive message for the user for the command itself
+        download_cmd_list = ['curl', '-L', '-o', str(app_image_path), url]
+        if not system_utils.run_command(
+            download_cmd_list,
+            logger=logger,
+            print_fn_info=con.print_info, # Shows "Executing command..."
+            print_fn_error=con.print_error,
+            custom_log_messages={
+                "start": f"Downloading {app_data.get('name', app_key)} AppImage...",
+                "success": f"Successfully downloaded {app_data.get('name', app_key)} AppImage.",
+                "failure": f"Failed to download {app_data.get('name', app_key)} AppImage."
+            }
+        ):
+            all_appimages_successful = False
+            # Error already logged by run_command
+            continue # Next AppImage
+
+        # --- Set Executable Permission ---
+        logger.info(f"Setting execute permission for {app_image_path}...")
+        try:
+            current_permissions = os.stat(app_image_path).st_mode
+            new_permissions = current_permissions | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH
+            os.chmod(app_image_path, new_permissions)
+            logger.debug(f"Set {app_image_path} to be executable.")
+            con.print_info(f"Made {rename_to} executable.")
+        except OSError as e_chmod:
+            logger.error(f"Failed to set execute permission for {app_image_path}: {e_chmod}", exc_info=True)
+            con.print_error(f"Error setting execute permission for {rename_to}: {e_chmod}")
+            all_appimages_successful = False
+            continue # Next AppImage
+
+        # --- Create .desktop file ---
+        desktop_file_name = _generate_desktop_file_name(rename_to)
+        desktop_file_path = desktop_entries_dir / desktop_file_name
+        logger.info(f"Generating .desktop file at {desktop_file_path} for {app_key}...")
+
+        desktop_content = f"""[Desktop Entry]
+Version={app_data.get('version', '1.0')}
+Name={app_data.get('name', app_key)}
+Comment={app_data.get('comment', '')}
+Exec={shlex.quote(str(app_image_path))}
+Icon={shlex.quote(icon_full_path_str) if icon_full_path_str else ""}
+Type=Application
+Terminal=false
+Categories={app_data.get('categories', 'Utility;')}
+"""
+        # Using shlex.quote for Exec and Icon paths for safety
+
+        try:
+            with open(desktop_file_path, 'w', encoding='utf-8') as f_desktop:
+                f_desktop.write(desktop_content)
+            logger.info(f"Successfully created .desktop file: {desktop_file_path}")
+            con.print_info(f"Created desktop entry: {desktop_file_name}")
+        except IOError as e_desktop:
+            logger.error(f"Failed to write .desktop file {desktop_file_path}: {e_desktop}", exc_info=True)
+            con.print_error(f"Error creating .desktop file for {app_key}: {e_desktop}")
+            all_appimages_successful = False
+            # No need to continue to next appimage, this specific one failed at .desktop creation
+
+    # --- Update Desktop Database ---
+    # Only run if there were AppImages defined and all previous steps for them were successful (or handled)
+    # The all_appimages_successful flag might be false due to individual app failures,
+    # but we should still try to update the database if at least one app was processed and some config existed.
+    if custom_app_images_config: # Check if there was anything to process
+        logger.info("Attempting to update desktop database...")
+        update_db_cmd = ['update-desktop-database', str(desktop_entries_dir)]
+        if system_utils.run_command(
+            update_db_cmd,
+            logger=logger,
+            print_fn_info=con.print_info,
+            print_fn_error=con.print_error,
+            custom_log_messages={
+                "start": f"Updating desktop database for directory: {desktop_entries_dir}...",
+                "success": "Successfully updated desktop database.",
+                "failure": "Failed to update desktop database."
+            }
+        ):
+            logger.info("Desktop database updated successfully.")
+            # con.print_success("Desktop database updated.") # run_command prints this
+        else:
+            # If this fails, it's not necessarily a failure of all appimages,
+            # but it's a failure of this step.
+            # Individual appimages might still work but might not appear in menus immediately.
+            logger.warning("Failed to update desktop database. Desktop entries might not be immediately visible.")
+            # con.print_warning("Failed to update desktop database. Manual update might be needed or a restart.")
+            # We don't set all_appimages_successful to False here, as some might have installed correctly.
+            # This is a system-level post-processing step.
+            # However, if the task is to ensure they are *integrated*, this could be a failure point.
+            # For now, treat as a warning for this function's return.
+            # Let's decide that if this fails, the overall process for appimages is not fully successful.
+            all_appimages_successful = False
+
+    return all_appimages_successful
 
 # _is_package_already_installed was moved to system_utils.is_package_installed_rpm
 
@@ -116,6 +278,7 @@ def run_phase6(app_config: dict) -> bool:
     dnf_step_success = True
     custom_dnf_step_success = True
     flatpak_step_success = True
+    appimage_step_success = True # New step
     
     phase6_config = config_loader.get_phase_data(app_config, "phase6_additional_packages")
     if not phase6_config: # get_phase_data returns {} if not found or error
@@ -188,7 +351,24 @@ def run_phase6(app_config: dict) -> bool:
     else:
         app_logger.info("No Flatpak applications listed for Phase 6.")
         con.print_info("No additional Flatpak applications listed for installation in Phase 6.")
-    
+
+    # --- Step 4: Custom AppImages ---
+    app_logger.info("Phase 6, Step 4: Installing custom AppImages...")
+    con.print_info("\nStep 4: Installing custom AppImages from Phase 6 configuration...")
+    custom_app_images_config = phase6_config.get("custom_app_images", {})
+    if custom_app_images_config:
+        if not _install_custom_app_images(custom_app_images_config, app_logger):
+            overall_success = False
+            appimage_step_success = False
+            app_logger.error("Failed to install one or more custom AppImages in Phase 6.")
+            # _install_custom_app_images logs its own detailed errors and prints user feedback
+        else:
+            app_logger.info("Successfully processed custom AppImages in Phase 6.")
+            # _install_custom_app_images logs its own detailed success and prints user feedback
+    else:
+        app_logger.info("No custom AppImages listed for Phase 6.")
+        con.print_info("No custom AppImages listed for installation in Phase 6.")
+
     # --- Phase Completion Summary ---
     if overall_success:
         app_logger.info("Phase 6: Additional User Packages completed successfully.")
@@ -201,6 +381,8 @@ def run_phase6(app_config: dict) -> bool:
             failed_stages.append("Custom Repository DNF Packages")
         if not flatpak_step_success:
             failed_stages.append("Flatpak Applications")
+        if not appimage_step_success: # New
+            failed_stages.append("Custom AppImages")
 
         error_details = "Failures occurred in: " + ", ".join(failed_stages) + "." if failed_stages else "An unspecified step failed."
 
