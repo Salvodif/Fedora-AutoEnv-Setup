@@ -113,6 +113,9 @@ def run_phase6(app_config: dict) -> bool:
     app_logger.info("Starting Phase 6: Additional User Packages.")
     con.print_step("PHASE 6: Additional User Packages")
     overall_success = True
+    dnf_step_success = True
+    custom_dnf_step_success = True
+    flatpak_step_success = True
     
     phase6_config = config_loader.get_phase_data(app_config, "phase6_additional_packages")
     if not phase6_config: # get_phase_data returns {} if not found or error
@@ -134,6 +137,7 @@ def run_phase6(app_config: dict) -> bool:
             logger=app_logger
         ):
             overall_success = False
+            dnf_step_success = False
             app_logger.error("Failed to install one or more standard DNF packages in Phase 6.")
         else:
             app_logger.info(f"Successfully processed standard DNF packages in Phase 6: {dnf_packages_to_install_ph6}")
@@ -150,10 +154,12 @@ def run_phase6(app_config: dict) -> bool:
             if not isinstance(pkg_config_dict, dict): # Validate config structure
                 app_logger.warning(f"Invalid configuration for custom DNF package '{pkg_key}' in Phase 6 config (not a dictionary). Skipping.")
                 con.print_warning(f"Invalid configuration for custom DNF package '{pkg_key}'. Skipping.")
-                overall_success = False 
+                overall_success = False
+                custom_dnf_step_success = False
                 continue
             if not _install_custom_repo_dnf_package(pkg_key, pkg_config_dict):
                 overall_success = False
+                custom_dnf_step_success = False
                 # _install_custom_repo_dnf_package logs its own errors
                 app_logger.error(f"Installation failed for custom DNF package: {pkg_config_dict.get('name', pkg_key)}")
     else:
@@ -174,6 +180,7 @@ def run_phase6(app_config: dict) -> bool:
             logger=app_logger
         ):
             overall_success = False
+            flatpak_step_success = False
             app_logger.error("Failed to install one or more Flatpak applications in Phase 6.")
         else:
             app_logger.info(f"Successfully processed Flatpak applications in Phase 6: {list(flatpak_apps_to_install_ph6.keys())}")
@@ -187,7 +194,17 @@ def run_phase6(app_config: dict) -> bool:
         app_logger.info("Phase 6: Additional User Packages completed successfully.")
         con.print_success("Phase 6: Additional User Packages completed successfully.")
     else:
-        app_logger.error("Phase 6: Additional User Packages completed with errors.")
-        con.print_error("Phase 6: Additional User Packages completed with errors. Please review the output and log file.")
+        failed_stages = []
+        if not dnf_step_success:
+            failed_stages.append("Standard DNF Packages")
+        if not custom_dnf_step_success:
+            failed_stages.append("Custom Repository DNF Packages")
+        if not flatpak_step_success:
+            failed_stages.append("Flatpak Applications")
+
+        error_details = "Failures occurred in: " + ", ".join(failed_stages) + "." if failed_stages else "An unspecified step failed."
+
+        app_logger.error(f"Phase 6: Additional User Packages completed with errors. {error_details}")
+        con.print_error(f"Phase 6: Additional User Packages completed with errors. {error_details} Please review the output and log file.")
     
     return overall_success
