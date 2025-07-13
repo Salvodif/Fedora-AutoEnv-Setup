@@ -149,7 +149,7 @@
           "sudo rpm --import https://brave-browser-rpm-release.s3.brave.com/brave-core.asc"
         ],
         "dnf_package_to_install": "brave-browser"
-      },
+      }
     },
     "flatpak_apps": {
       "org.gimp.GIMP": "GIMP (Image Editor)",

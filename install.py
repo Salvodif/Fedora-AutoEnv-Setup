@@ -57,7 +57,7 @@ PHASES = {
         "description": "Install user-selected applications from DNF and Flatpak.",
         "dependencies": ["phase1_system_preparation", "phase2_basic_configuration"],
         "handler": phase6_additional_packages.run_phase6
-    }
+    },
 }
 
 # Path to the status file (in the same directory as install.py)
