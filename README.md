@@ -21,55 +21,34 @@ Fedora AutoEnv Setup is a streamlined, configuration-driven tool to automate the
 - 🧹 **Clean and Organized**: A minimal set of files makes it easy to understand and maintain.
 - 📝 **Robust Logging**: All operations are logged to `fedora_autoenv_setup.log` for easy debugging.
 
-## How It Works
-
-The `install.py` script reads all its instructions from the `packages.json` file. This file is organized into logical sections, allowing you to specify:
-
-- DNF performance settings
-- DNF and Flatpak packages to install
-- Nerd Fonts to download and set up
-- Terminal applications and configurations
-- Optional GNOME and NVIDIA driver setups
-
-The script executes these tasks sequentially, providing clear feedback and logging everything along the way.
-
-## Prerequisites
+## Prerequisite
 
 - 🖥️ A fresh installation of Fedora Workstation.
 - 🌐 An active internet connection.
 - 🔒 You must run the script with `sudo`.
 
-## Usage
 
-1. **Clone the repository:**
+## Installation
+
+1. **Clona il repository:**
    ```bash
    git clone https://github.com/your-username/Fedora-AutoEnv-Setup.git
    cd Fedora-AutoEnv-Setup
    ```
 
-2. **Customize your setup (Optional):**
-   Open the `packages.json` file and edit it to match your desired setup. You can add or remove packages, change DNF settings, or disable entire sections.
+## Config (`packages.json`)
 
-3. **Run the installation script:**
-   ```bash
-   sudo python3 install.py
-   ```
+Ecco una breve panoramica della struttura di `packages.json`:
 
-The script will guide you through the installation process, asking for confirmation for major steps.
+- `"dnf_settings"`: un oggetto contenente coppie chiave-valore per le impostazioni in `/etc/dnf/dnf.conf`.
+- `"dnf_packages"`: un elenco di pacchetti DNF da installare.
+- `"flatpak_apps"`: un dizionario in cui le chiavi sono gli ID delle applicazioni Flatpak e i valori sono i loro nomi descrittivi.
+- `"terminal_packages"`: un elenco di pacchetti DNF per il potenziamento del terminale (ad es. `ghostty`, `fish`).
+- `"nerd_fonts"`: un dizionario per specificare i caratteri Nerd da installare, con i nomi dei caratteri come chiavi e gli URL di download come valori.
+- `"gnome_configuration"`: una sezione facoltativa per i pacchetti relativi a GNOME.
+- `"nvidia_installation"`: una sezione facoltativa per i pacchetti di driver NVIDIA.
 
-## Configuration (`packages.json`)
-
-Here’s a brief overview of the `packages.json` structure:
-
-- `"dnf_settings"`: An object containing key-value pairs for settings in `/etc/dnf/dnf.conf`.
-- `"dnf_packages"`: A list of DNF packages to be installed.
-- `"flatpak_apps"`: A dictionary where keys are Flatpak application IDs and values are their friendly names.
-- `"terminal_packages"`: A list of DNF packages for terminal enhancement (e.g., `ghostty`, `fish`).
-- `"nerd_fonts"`: A dictionary to specify Nerd Fonts to install, with font names as keys and download URLs as values.
-- `"gnome_configuration"`: An optional section for GNOME-related packages.
-- `"nvidia_installation"`: An optional section for NVIDIA driver packages.
-
-### Example `packages.json`:
+### Esempio `packages.json`:
 ```json
 {
   "dnf_settings": {
@@ -90,10 +69,10 @@ Here’s a brief overview of the `packages.json` structure:
 }
 ```
 
-## Contributing
+## Contribuire
 
-Contributions are welcome! If you have ideas for improvements or new features, feel free to open an issue or submit a pull request.
+I contributi sono benvenuti! Se hai idee per miglioramenti o nuove funzionalità, sentiti libero di aprire un problema o inviare una richiesta pull.
 
-## License
+## Licenza
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+Questo progetto è concesso in licenza con la licenza MIT. Per i dettagli, vedere il file [LICENSE](LICENSE).
