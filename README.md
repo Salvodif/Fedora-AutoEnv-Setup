@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Fedora AutoEnv Setup Logo" width="200"/>
+  <img src="assets/logo.png" alt="Fedora AutoEnv Setup Logo" />
 </p>
 
 # Fedora AutoEnv Setup
