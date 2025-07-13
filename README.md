@@ -1,36 +1,34 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Fedora AutoEnv Setup Logo" width="200"/>
+</p>
 
-#  Fedora AutoEnv Setup
+# Fedora AutoEnv Setup
 
-Fedora AutoEnv Setup è uno strumento semplificato e basato sulla configurazione per automatizzare l'installazione di un ambiente Fedora. Semplifica l'installazione di pacchetti, la configurazione delle impostazioni di sistema e l'impostazione degli strumenti di sviluppo attraverso un unico script facile da usare.
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python Badge">
+  <img src="https://img.shields.io/badge/Shell_Script-121011?style=for-the-badge&logo=gnu-bash&logoColor=white" alt="Shell Script Badge">
+  <img src="https://img.shields.io/badge/Fedora-51A2DA?style=for-the-badge&logo=fedora&logoColor=white" alt="Fedora Badge">
+</p>
+
+Fedora AutoEnv Setup is a streamlined, configuration-driven tool to automate the setup of a Fedora environment. It simplifies the installation of packages, configuration of system settings, and setup of development tools through a single, easy-to-use script.
 
 ## Key Features
 
-- 🚀 **Installazione semplificata**: un unico comando per avviare l'intero processo di installazione.
-- ⚙️ **Configuration-Driven**: personalizza facilmente la tua configurazione modificando il file `packages.json`. Non c'è bisogno di scavare negli script.
-- 🤖 **Processi automatizzati**: gestisce la configurazione DNF, l'installazione di RPM Fusion, l'installazione di pacchetti (DNF e Flatpak), Nerd Fonts e altro ancora.
-- 🖱️ **Sezioni interattive e facoltative**: conferma i principali passaggi di installazione come la configurazione di GNOME e l'installazione dei driver NVIDIA.
-- 🧹 **Pulito e organizzato**: un set minimo di file ne facilita la comprensione e la manutenzione.
-- 📝 **Registrazione robusta**: tutte le operazioni vengono registrate su `fedora_autoenv_setup.log` per un facile debug.
+- 🚀 **Simplified Installation**: A single command to start the entire setup process.
+- ⚙️ **Configuration-Driven**: Easily customize your setup by modifying the `packages.json` file. No need to dig through scripts.
+- 🤖 **Automated Processes**: Handles DNF configuration, RPM Fusion setup, package installation (DNF and Flatpak), Nerd Fonts, and more.
+- 🖱️ **Interactive and Optional Sections**: Confirm major installation steps like GNOME configuration and NVIDIA driver installation.
+- 🧹 **Clean and Organized**: A minimal set of files makes it easy to understand and maintain.
+- 📝 **Robust Logging**: All operations are logged to `fedora_autoenv_setup.log` for easy debugging.
 
-## Come funziona
+## Prerequisite
 
-Lo script `install.py` legge tutte le sue istruzioni dal file `packages.json`. Questo file è organizzato in sezioni logiche, che consentono di specificare:
+- 🖥️ A fresh installation of Fedora Workstation.
+- 🌐 An active internet connection.
+- 🔒 You must run the script with `sudo`.
 
-- Impostazioni delle prestazioni DNF
-- Pacchetti DNF e Flatpak da installare
-- Font Nerd da scaricare e configurare
-- Applicazioni e configurazioni del terminale
-- Configurazioni opzionali dei driver GNOME e NVIDIA
 
-Lo script esegue queste attività in sequenza, fornendo un feedback chiaro e registrando tutto lungo il percorso.
-
-## Prerequisiti
-
-- 🖥️ Una nuova installazione di Fedora Workstation.
-- 🌐 Una connessione Internet attiva.
-- 🔒 È necessario eseguire lo script con `sudo`.
-
-## Utilizzo
+## Installation
 
 1. **Clona il repository:**
    ```bash
@@ -38,17 +36,7 @@ Lo script esegue queste attività in sequenza, fornendo un feedback chiaro e reg
    cd Fedora-AutoEnv-Setup
    ```
 
-2. **Personalizza la tua configurazione (opzionale):**
-   Apri il file `packages.json` e modificalo in modo che corrisponda alla configurazione desiderata. Puoi aggiungere o rimuovere pacchetti, modificare le impostazioni DNF o disabilitare intere sezioni.
-
-3. **Esegui lo script di installazione:**
-   ```bash
-   sudo python3 install.py
-   ```
-
-Lo script ti guiderà attraverso il processo di installazione, chiedendo conferma per i passaggi principali.
-
-## Configurazione (`packages.json`)
+## Config (`packages.json`)
 
 Ecco una breve panoramica della struttura di `packages.json`:
 
