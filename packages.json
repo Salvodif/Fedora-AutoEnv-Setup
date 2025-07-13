@@ -143,15 +143,16 @@
         ],
         "dnf_package_to_install": "code"
       },
-      "google_chrome": {
-        "name": "Google Chrome",
-        "check_if_installed_pkg": "google-chrome-stable",
+      "brave_browser": {
+        "name": "Brave Browser",
+        "check_if_installed_pkg": "brave-browser",
         "repo_setup_commands": [
-            "sudo dnf install -y fedora-workstation-repositories",
-            "sudo dnf config-manager --set-enabled google-chrome"
+          "sudo dnf install -y dnf-plugins-core",
+          "sudo dnf config-manager --add-repo https://brave-browser-rpm-release.s3.brave.com/brave-browser.repo",
+          "sudo rpm --import https://brave-browser-rpm-release.s3.brave.com/brave-core.asc"
         ],
-        "dnf_package_to_install": "google-chrome-stable"
-      }
+        "dnf_package_to_install": "brave-browser"
+      },
     },
     "flatpak_apps": {
       "org.gimp.GIMP": "GIMP (Image Editor)",
