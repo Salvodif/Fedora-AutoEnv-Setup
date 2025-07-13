@@ -31,3 +31,29 @@ Traceback (most recent call last):
              ^^^^^^^
 EOFError: EOF when reading a line
 2025-07-13 15:11:32,199 - FedoraAutoEnvSetup - INFO - [install:231] - Fedora AutoEnv Setup script finished.
+2025-07-13 15:13:16,425 - FedoraAutoEnvSetup - INFO - [logger_utils:84] - File logging initialized to: /app/fedora_autoenv_setup.log
+2025-07-13 15:13:16,644 - FedoraAutoEnvSetup - INFO - [install:162] - Fedora AutoEnv Setup script started.
+2025-07-13 15:13:16,645 - FedoraAutoEnvSetup - INFO - [config_loader:64] - Loading configuration from: packages.json
+2025-07-13 15:13:16,645 - FedoraAutoEnvSetup - INFO - [config_loader:83] - Successfully loaded configuration from 'packages.json'.
+2025-07-13 15:13:16,652 - FedoraAutoEnvSetup - CRITICAL - [install:225] - An unexpected critical error occurred in the main application: EOF when reading a line
+Traceback (most recent call last):
+  File "/app/install.py", line 189, in main
+    choice = con.ask_question("Enter your choice:", choices=valid_choices).lower()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/scripts/console_output.py", line 144, in ask_question
+    user_input = Prompt.ask(
+                 ^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/rich/prompt.py", line 149, in ask
+    return _prompt(default=default, stream=stream)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/rich/prompt.py", line 292, in __call__
+    value = self.get_input(self.console, prompt, self.password, stream=stream)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/rich/prompt.py", line 211, in get_input
+    return console.input(prompt, password=password, stream=stream)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.11/lib/python3.12/site-packages/rich/console.py", line 2165, in input
+    result = input()
+             ^^^^^^^
+EOFError: EOF when reading a line
+2025-07-13 15:13:16,660 - FedoraAutoEnvSetup - INFO - [install:231] - Fedora AutoEnv Setup script finished.

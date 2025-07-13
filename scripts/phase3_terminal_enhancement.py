@@ -76,37 +76,11 @@ def run_phase3(app_config: dict) -> bool:
                 print_fn_error=con.print_error,
             )
             config_file = config_dir / "config"
-            config_content = """\
-shell-integration = fish
-window-height = 30
-window-width = 180
-theme = Dracula
-background = #282a36
-foreground = #f8f8f2
-selection-background = #44475a
-selection-foreground = #ffffff
-cursor-color = #f8f8f2
-cursor-text = #282a36
-cursor-style = underline
-palette = 0=#21222c
-palette = 1=#ff5555
-palette = 2=#50fa7b
-palette = 3=#f1fa8c
-palette = 4=#bd93f9
-palette = 5=#ff79c6
-palette = 6=#8be9fd
-palette = 7=#f8f8f2
-palette = 8=#6272a4
-palette = 9=#ff6e6e
-palette = 10=#69ff94
-palette = 11=#ffffa5
-palette = 12=#d6acff
-palette = 13=#ff92df
-palette = 14=#a4ffff
-palette = 15=#ffffff
-font-size = 9
-font-family = hack nerd font mono regular
-"""
+            source_config_file = Path(__file__).resolve().parent.parent / "assets" / "ghostty.conf"
+
+            with open(source_config_file, "r") as f:
+                config_content = f.read()
+
             system_utils.create_file_as_user(
                 config_file,
                 config_content,
