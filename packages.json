@@ -3,7 +3,10 @@
     "dnf_packages": [
       "dnf5",
       "dnf5-plugins",
-      "flatpak"
+      "flatpak",
+      "atuin",
+      "fd-find",
+      "zoxide"
     ]
   },
   "phase2_basic_configuration": {
@@ -45,12 +48,6 @@
       "FiraMono": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/FiraMono.zip",
       "Meslo": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/Meslo.zip"
     }
-  },
-  "phase3_terminal_enhancement": {
-    "autin": "cargo install atuin",
-    "eza": "cargo install eza",
-    "fd-find": "cargo install fd-find",
-    "zoxide": "curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh"
   },
   "phase4_gnome_configuration": {
     "dnf_packages": [
@@ -172,5 +169,11 @@
         "icon_path": "$HOME/Applications/icons/lala.png"
       }
     }
+  },
+  "phase7_terminal_configuration": {
+    "dnf_packages": [
+      "ghostty",
+      "fish"
+    ]
   }
 }
