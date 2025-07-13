@@ -1,3 +1,4 @@
+
 #  Fedora AutoEnv Setup
 
 Fedora AutoEnv Setup è uno strumento semplificato e basato sulla configurazione per automatizzare l'installazione di un ambiente Fedora. Semplifica l'installazione di pacchetti, la configurazione delle impostazioni di sistema e l'impostazione degli strumenti di sviluppo attraverso un unico script facile da usare.
