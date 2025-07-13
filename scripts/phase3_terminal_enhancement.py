@@ -1,4 +1,4 @@
-# Fedora-AutoEnv-Setup/scripts/phase7_terminal_configuration.py
+# Fedora-AutoEnv-Setup/scripts/phase3_terminal_enhancement.py
 
 import sys
 from pathlib import Path
@@ -9,9 +9,9 @@ from scripts import console_output as con
 from scripts import system_utils
 from scripts.logger_utils import app_logger
 
-def run_phase7(app_config: dict) -> bool:
-    con.print_step("PHASE 7: Terminal Configuration")
-    app_logger.info("Starting Phase 7: Terminal Configuration.")
+def run_phase3(app_config: dict) -> bool:
+    con.print_step("PHASE 3: Terminal Enhancement")
+    app_logger.info("Starting Phase 3: Terminal Enhancement.")
     overall_success = True
 
     # --- Step 0: Determine Target User ---
@@ -20,23 +20,23 @@ def run_phase7(app_config: dict) -> bool:
         print_fn_error=con.print_error, print_fn_warning=con.print_warning
     )
     if not target_user:
-        app_logger.error("Cannot determine target user for Phase 7. Aborting phase.")
+        app_logger.error("Cannot determine target user for Phase 3. Aborting phase.")
         return False
 
     target_user_home = system_utils.get_user_home_dir(target_user, logger=app_logger, print_fn_error=con.print_error)
     if not target_user_home:
-        app_logger.error(f"Target user home for '{target_user}' not found. Aborting user-specific part of Phase 7.")
+        app_logger.error(f"Target user home for '{target_user}' not found. Aborting user-specific part of Phase 3.")
         return False
 
-    phase7_config = config_loader.get_phase_data(app_config, "phase7_terminal_configuration")
-    if not phase7_config:
-        con.print_warning("No configuration found for Phase 7. Skipping.")
-        app_logger.warning("No Phase 7 configuration found or configuration is invalid. Skipping.")
+    phase3_config = config_loader.get_phase_data(app_config, "phase3_terminal_enhancement")
+    if not phase3_config:
+        con.print_warning("No configuration found for Phase 3. Skipping.")
+        app_logger.warning("No Phase 3 configuration found or configuration is invalid. Skipping.")
         return True
 
     # --- Step 1: Install DNF packages ---
-    con.print_sub_step("Installing DNF packages for terminal configuration...")
-    dnf_packages = phase7_config.get("dnf_packages", [])
+    con.print_sub_step("Installing DNF packages for terminal enhancement...")
+    dnf_packages = phase3_config.get("dnf_packages", [])
     if dnf_packages:
         # Enable copr repo for ghostty
         copr_enable_cmd = "dnf copr enable -y scottames/ghostty"
@@ -76,37 +76,11 @@ def run_phase7(app_config: dict) -> bool:
                 print_fn_error=con.print_error,
             )
             config_file = config_dir / "config"
-            config_content = """\
-shell-integration = fish
-window-height = 30
-window-width = 180
-theme = Dracula
-background = #282a36
-foreground = #f8f8f2
-selection-background = #44475a
-selection-foreground = #ffffff
-cursor-color = #f8f8f2
-cursor-text = #282a36
-cursor-style = underline
-palette = 0=#21222c
-palette = 1=#ff5555
-palette = 2=#50fa7b
-palette = 3=#f1fa8c
-palette = 4=#bd93f9
-palette = 5=#ff79c6
-palette = 6=#8be9fd
-palette = 7=#f8f8f2
-palette = 8=#6272a4
-palette = 9=#ff6e6e
-palette = 10=#69ff94
-palette = 11=#ffffa5
-palette = 12=#d6acff
-palette = 13=#ff92df
-palette = 14=#a4ffff
-palette = 15=#ffffff
-font-size = 9
-font-family = hack nerd font mono regular
-"""
+            source_config_file = Path(__file__).resolve().parent.parent / "assets" / "ghostty.conf"
+
+            with open(source_config_file, "r") as f:
+                config_content = f.read()
+
             system_utils.create_file_as_user(
                 config_file,
                 config_content,
@@ -151,10 +125,10 @@ font-family = hack nerd font mono regular
 
     # --- Phase Completion Summary ---
     if overall_success:
-        con.print_success("Phase 7: Terminal Configuration completed successfully.")
-        app_logger.info("Phase 7 completed successfully.")
+        con.print_success("Phase 3: Terminal Enhancement completed successfully.")
+        app_logger.info("Phase 3 completed successfully.")
     else:
-        con.print_error("Phase 7: Terminal Configuration completed with errors.")
-        app_logger.error("Phase 7 completed with errors.")
+        con.print_error("Phase 3: Terminal Enhancement completed with errors.")
+        app_logger.error("Phase 3 completed with errors.")
 
     return overall_success
