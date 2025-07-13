@@ -30,7 +30,7 @@ Fedora AutoEnv Setup is a streamlined, configuration-driven tool to automate the
 
 ## Installation
 
-1. **Clona il repository:**
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/your-username/Fedora-AutoEnv-Setup.git
    cd Fedora-AutoEnv-Setup
@@ -38,17 +38,17 @@ Fedora AutoEnv Setup is a streamlined, configuration-driven tool to automate the
 
 ## Config (`packages.json`)
 
-Ecco una breve panoramica della struttura di `packages.json`:
+Here is a brief overview of the `packages.json` structure:
 
-- `"dnf_settings"`: un oggetto contenente coppie chiave-valore per le impostazioni in `/etc/dnf/dnf.conf`.
-- `"dnf_packages"`: un elenco di pacchetti DNF da installare.
-- `"flatpak_apps"`: un dizionario in cui le chiavi sono gli ID delle applicazioni Flatpak e i valori sono i loro nomi descrittivi.
-- `"terminal_packages"`: un elenco di pacchetti DNF per il potenziamento del terminale (ad es. `ghostty`, `fish`).
-- `"nerd_fonts"`: un dizionario per specificare i caratteri Nerd da installare, con i nomi dei caratteri come chiavi e gli URL di download come valori.
-- `"gnome_configuration"`: una sezione facoltativa per i pacchetti relativi a GNOME.
-- `"nvidia_installation"`: una sezione facoltativa per i pacchetti di driver NVIDIA.
+- `"dnf_settings"`: An object containing key-value pairs for settings in `/etc/dnf/dnf.conf`.
+- `"dnf_packages"`: A list of DNF packages to install.
+- `"flatpak_apps"`: A dictionary where keys are Flatpak application IDs and values are their descriptive names.
+- `"terminal_packages"`: A list of DNF packages for terminal enhancements (e.g., `ghostty`, `fish`).
+- `"nerd_fonts"`: A dictionary to specify Nerd Fonts to install, with font names as keys and download URLs as values.
+- `"gnome_configuration"`: An optional section for GNOME-related packages.
+- `"nvidia_installation"`: An optional section for NVIDIA driver packages.
 
-### Esempio `packages.json`:
+### Example `packages.json`:
 ```json
 {
   "dnf_settings": {
@@ -69,10 +69,10 @@ Ecco una breve panoramica della struttura di `packages.json`:
 }
 ```
 
-## Contribuire
+## Contributing
 
-I contributi sono benvenuti! Se hai idee per miglioramenti o nuove funzionalità, sentiti libero di aprire un problema o inviare una richiesta pull.
+Contributions are welcome! If you have ideas for improvements or new features, feel free to open an issue or submit a pull request.
 
-## Licenza
+## License
 
-Questo progetto è concesso in licenza con la licenza MIT. Per i dettagli, vedere il file [LICENSE](LICENSE).
+This project is licensed under the MIT License. For details, see the [LICENSE](LICENSE) file.
