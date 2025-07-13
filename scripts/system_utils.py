@@ -339,6 +339,56 @@ def backup_system_file(
         if _p_warning: _p_warning(f"Could not back up {filepath}. Error: {e}")
         return False
 
+def create_file_as_user(
+    file_path: Path,
+    content: str,
+    target_user: str,
+    logger: Optional[logging.Logger] = None,
+    print_fn_info: Optional[Callable[[str], None]] = None,
+    print_fn_error: Optional[Callable[[str], None]] = None
+) -> bool:
+    """Creates a file with the given content as the specified user."""
+    log = logger or default_script_logger
+    _p_info = print_fn_info or (lambda msg: None)
+    _p_error = print_fn_error or PRINT_FN_ERROR_DEFAULT
+
+    log.info(f"Creating file '{file_path}' as user '{target_user}'.")
+    if _p_info and _p_info is not PRINT_FN_INFO_DEFAULT and _p_info is not None:
+        _p_info(f"Creating file '{file_path}' as user '{target_user}'.")
+
+    try:
+        # Use shell redirection to write the file content
+        # This is a common and effective way to write a file as another user with sudo
+        # The content is passed via stdin to `tee`
+        cmd = f"tee {shlex.quote(str(file_path))}"
+
+        # We need to run this with `sudo -u` and `bash -c` to handle the redirection correctly
+        full_cmd = ["sudo", "-u", target_user, "bash", "-c", cmd]
+
+        process = subprocess.run(
+            full_cmd,
+            input=content,
+            text=True,
+            check=True,
+            capture_output=True
+        )
+
+        if process.stderr:
+            log.warning(f"Stderr from tee command for '{file_path}': {process.stderr.strip()}")
+
+        log.info(f"Successfully created file '{file_path}' for user '{target_user}'.")
+        return True
+    except subprocess.CalledProcessError as e:
+        log.error(f"Failed to create file '{file_path}' as user '{target_user}'. Error: {e.stderr or e.stdout or e}", exc_info=True)
+        if _p_error:
+            _p_error(f"Failed to create file '{file_path}': {e.stderr or e.stdout}")
+        return False
+    except Exception as e:
+        log.error(f"An unexpected error occurred while creating file '{file_path}': {e}", exc_info=True)
+        if _p_error:
+            _p_error(f"An unexpected error occurred while creating file '{file_path}': {e}")
+        return False
+
 def ensure_dir_exists(
     dir_path: Path,
     target_user: Optional[str] = None,
