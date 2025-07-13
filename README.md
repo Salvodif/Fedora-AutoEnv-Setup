@@ -1,15 +1,25 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Fedora AutoEnv Setup Logo" width="200"/>
+</p>
+
 # Fedora AutoEnv Setup
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python Badge">
+  <img src="https://img.shields.io/badge/Shell_Script-121011?style=for-the-badge&logo=gnu-bash&logoColor=white" alt="Shell Script Badge">
+  <img src="https://img.shields.io/badge/Fedora-51A2DA?style=for-the-badge&logo=fedora&logoColor=white" alt="Fedora Badge">
+</p>
 
 Fedora AutoEnv Setup is a streamlined, configuration-driven tool to automate the setup of a Fedora environment. It simplifies the installation of packages, configuration of system settings, and setup of development tools through a single, easy-to-use script.
 
 ## Key Features
 
-- **Simplified Installation**: A single command to start the entire setup process.
-- **Configuration-Driven**: Easily customize your setup by modifying the `packages.json` file. No need to dig through scripts.
-- **Automated Processes**: Handles DNF configuration, RPM Fusion setup, package installation (DNF and Flatpak), Nerd Fonts, and more.
-- **Interactive and Optional Sections**: Confirm major installation steps like GNOME configuration and NVIDIA driver installation.
-- **Clean and Organized**: A minimal set of files makes it easy to understand and maintain.
-- **Robust Logging**: All operations are logged to `fedora_autoenv_setup.log` for easy debugging.
+- 🚀 **Simplified Installation**: A single command to start the entire setup process.
+- ⚙️ **Configuration-Driven**: Easily customize your setup by modifying the `packages.json` file. No need to dig through scripts.
+- 🤖 **Automated Processes**: Handles DNF configuration, RPM Fusion setup, package installation (DNF and Flatpak), Nerd Fonts, and more.
+- 🖱️ **Interactive and Optional Sections**: Confirm major installation steps like GNOME configuration and NVIDIA driver installation.
+- 🧹 **Clean and Organized**: A minimal set of files makes it easy to understand and maintain.
+- 📝 **Robust Logging**: All operations are logged to `fedora_autoenv_setup.log` for easy debugging.
 
 ## How It Works
 
@@ -25,9 +35,9 @@ The script executes these tasks sequentially, providing clear feedback and loggi
 
 ## Prerequisites
 
-- A fresh installation of Fedora Workstation.
-- An active internet connection.
-- You must run the script with `sudo`.
+- 🖥️ A fresh installation of Fedora Workstation.
+- 🌐 An active internet connection.
+- 🔒 You must run the script with `sudo`.
 
 ## Usage
 
