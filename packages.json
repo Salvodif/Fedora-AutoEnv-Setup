@@ -24,7 +24,6 @@
       "fzf",
       "libreoffice-opensymbol-fonts",
       "mscore-fonts-all",
-      "zsh",
       "gettext",
       "sassc",
       "nodejs",
@@ -51,13 +50,7 @@
     "autin": "cargo install atuin",
     "eza": "cargo install eza",
     "fd-find": "cargo install fd-find",
-    "zoxide": "curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh",
-    "omz": "curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | bash",
-    "zsh-autosuggestions": "git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-autosuggestions",
-    "zsh-syntax-highlighting": "git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting",
-    "you-should-use": "git clone https://github.com/MichaelAquilina/zsh-you-should-use.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/you-should-use",
-    "zsh-eza": "git clone https://github.com/z-shell/zsh-eza.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/zsh-eza",
-    "fzf-tab": "git clone https://github.com/Aloxaf/fzf-tab ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/plugins/fzf-tab"
+    "zoxide": "curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh"
   },
   "phase4_gnome_configuration": {
     "dnf_packages": [
