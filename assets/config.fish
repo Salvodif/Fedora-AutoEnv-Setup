@@ -5,8 +5,15 @@ end
 atuin init fish | source
 # Set up fzf key bindings
 fzf --fish | source
-zoxide init fish | source
+zoxide init --cmd cd fish | source
 
+
+
+alias df="dust"
+alias du="duf"
+alias top="btop"
+alias cat="bat"
+alias find="fd"
 alias ls "eza --icons=always"
 alias la "ls -a"
 alias ll "ls -l"
