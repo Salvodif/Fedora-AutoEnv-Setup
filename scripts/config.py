@@ -32,7 +32,7 @@ app_logger = setup_logger()
 
 # --- Phases Configuration ---
 # Import phase handlers here to avoid circular dependencies
-from scripts.phases import system_preparation, basic_installation, terminal_enhancement, gnome_configuration, nvidia_installation, additional_packages
+from scripts.phases import system_preparation, basic_installation, gnome_configuration, nvidia_installation, additional_packages
 
 PHASES = {
     "system_preparation": {
@@ -46,12 +46,6 @@ PHASES = {
         "description": "Install essential CLI tools, Python, Ghostty, media codecs, etc.",
         "dependencies": ["system_preparation"],
         "handler": basic_installation.run
-    },
-    "terminal_enhancement": {
-        "name": "Phase 3: Terminal Enhancement 💻✨",
-        "description": "Set up Ghostty, install plugins and copy custom configs.",
-        "dependencies": ["basic_installation"],
-        "handler": terminal_enhancement.run
     },
     "gnome_configuration": {
         "name": "Phase 4: GNOME Configuration & Extensions 🎨🖼️",
