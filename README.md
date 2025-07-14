@@ -38,34 +38,39 @@ Fedora AutoEnv Setup is a streamlined, configuration-driven tool to automate the
 
 ## Config (`packages.json`)
 
-Here is a brief overview of the `packages.json` structure:
+Here is a brief overview of the `packages.json` structure, which is organized by phases:
 
-- `"dnf_settings"`: An object containing key-value pairs for settings in `/etc/dnf/dnf.conf`.
-- `"dnf_packages"`: A list of DNF packages to install.
-- `"flatpak_apps"`: A dictionary where keys are Flatpak application IDs and values are their descriptive names.
-- `"terminal_packages"`: A list of DNF packages for terminal enhancements (e.g., `ghostty`, `fish`).
-- `"nerd_fonts"`: A dictionary to specify Nerd Fonts to install, with font names as keys and download URLs as values.
-- `"gnome_configuration"`: An optional section for GNOME-related packages.
-- `"nvidia_installation"`: An optional section for NVIDIA driver packages.
+- **`phase1_system_preparation`**: Essential system packages and configurations.
+- **`phase2_basic_configuration`**: Core development tools, fonts, and terminal applications like `ghostty` and `fish`.
+- **`phase3_gnome_configuration`**: GNOME-specific packages, extensions, and settings.
+- **`phase4_nvidia_installation`**: NVIDIA driver packages.
+- **`phase5_additional_packages`**: Optional user applications from various sources.
 
-### Example `packages.json`:
+Each phase section can contain:
+- `dnf_packages`: A list of DNF packages to install.
+- `flatpak_apps`: A dictionary of Flatpak application IDs and their descriptions.
+- Other phase-specific keys, such as `dnf_swap_ffmpeg` or `nerd_fonts_to_install`.
+
+### Example `packages.json` Snippet:
 ```json
 {
-  "dnf_settings": {
-    "max_parallel_downloads": 10,
-    "fastestmirror": true
+  "phase1_system_preparation": {
+    "dnf_packages": [
+      "dnf5",
+      "flatpak"
+    ]
   },
-  "dnf_packages": [
-    "git",
-    "curl",
-    "vim"
-  ],
-  "flatpak_apps": {
-    "com.spotify.Client": "Spotify"
-  },
-  "terminal_packages": [
-    "fish"
-  ]
+  "phase2_basic_configuration": {
+    "dnf_packages": [
+      "git",
+      "curl",
+      "ghostty",
+      "fish"
+    ],
+    "flatpak_apps": {
+      "com.github.tchx84.Flatseal": "Flatseal"
+    }
+  }
 }
 ```
 

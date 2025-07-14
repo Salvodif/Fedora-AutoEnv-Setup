@@ -32,7 +32,7 @@ app_logger = setup_logger()
 
 # --- Phases Configuration ---
 # Import phase handlers here to avoid circular dependencies
-from scripts.phases import system_preparation, basic_installation, terminal_enhancement, gnome_configuration, nvidia_installation, additional_packages
+from scripts.phases import system_preparation, basic_installation, gnome_configuration, nvidia_installation, additional_packages
 
 PHASES = {
     "system_preparation": {
@@ -47,26 +47,20 @@ PHASES = {
         "dependencies": ["system_preparation"],
         "handler": basic_installation.run
     },
-    "terminal_enhancement": {
-        "name": "Phase 3: Terminal Enhancement 💻✨",
-        "description": "Set up Ghostty, install plugins and copy custom configs.",
-        "dependencies": ["basic_installation"],
-        "handler": terminal_enhancement.run
-    },
     "gnome_configuration": {
-        "name": "Phase 4: GNOME Configuration & Extensions 🎨🖼️",
+        "name": "Phase 3: GNOME Configuration & Extensions 🎨🖼️",
         "description": "Install GNOME Tweaks, Extension Manager, and configured extensions.",
         "dependencies": ["system_preparation", "basic_installation"],
         "handler": gnome_configuration.run
     },
     "nvidia_installation": {
-        "name": "Phase 5: NVIDIA Driver Installation 🎮🖥️",
+        "name": "Phase 4: NVIDIA Driver Installation 🎮🖥️",
         "description": "Install NVIDIA proprietary or open kernel drivers. Requires compatible GPU and user confirmation.",
         "dependencies": ["system_preparation"],
         "handler": nvidia_installation.run
     },
     "additional_packages": {
-        "name": "Phase 6: Additional User Packages 🧩🌐",
+        "name": "Phase 5: Additional User Packages 🧩🌐",
         "description": "Install user-selected applications from DNF and Flatpak.",
         "dependencies": ["system_preparation", "basic_installation"],
         "handler": additional_packages.run
