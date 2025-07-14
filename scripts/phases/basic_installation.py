@@ -80,7 +80,6 @@ def run(app_config):
             # You would need to implement a function to download and install fonts
             con.print_warning("Nerd Fonts installation is not yet implemented.")
 
-        # Copy ghostty config
         con.print_sub_step("Copying ghostty configuration file...")
         try:
             user = util.get_target_user()
