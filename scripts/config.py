@@ -48,19 +48,19 @@ PHASES = {
         "handler": basic_installation.run
     },
     "gnome_configuration": {
-        "name": "Phase 4: GNOME Configuration & Extensions 🎨🖼️",
+        "name": "Phase 3: GNOME Configuration & Extensions 🎨🖼️",
         "description": "Install GNOME Tweaks, Extension Manager, and configured extensions.",
         "dependencies": ["system_preparation", "basic_installation"],
         "handler": gnome_configuration.run
     },
     "nvidia_installation": {
-        "name": "Phase 5: NVIDIA Driver Installation 🎮🖥️",
+        "name": "Phase 4: NVIDIA Driver Installation 🎮🖥️",
         "description": "Install NVIDIA proprietary or open kernel drivers. Requires compatible GPU and user confirmation.",
         "dependencies": ["system_preparation"],
         "handler": nvidia_installation.run
     },
     "additional_packages": {
-        "name": "Phase 6: Additional User Packages 🧩🌐",
+        "name": "Phase 5: Additional User Packages 🧩🌐",
         "description": "Install user-selected applications from DNF and Flatpak.",
         "dependencies": ["system_preparation", "basic_installation"],
         "handler": additional_packages.run

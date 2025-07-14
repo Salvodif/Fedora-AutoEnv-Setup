@@ -80,6 +80,37 @@ def run(app_config):
             # You would need to implement a function to download and install fonts
             con.print_warning("Nerd Fonts installation is not yet implemented.")
 
+        # Copy ghostty config
+        con.print_sub_step("Copying ghostty configuration file...")
+        try:
+            user = util.get_target_user()
+            if user:
+                home_dir = util.get_user_home_dir(user)
+                if home_dir:
+                    config_dir = home_dir / ".config" / "ghostty"
+                    util.ensure_dir_exists(config_dir, target_user=user, logger=app_logger)
+
+                    source_path = "assets/ghostty.conf"
+                    target_path = config_dir / "config"
+
+                    util.run_command(
+                        ["cp", source_path, str(target_path)],
+                        logger=app_logger,
+                        print_fn_info=con.print_info,
+                        print_fn_error=con.print_error
+                    )
+
+                    util.run_command(
+                        ["chown", f"{user}:{user}", str(target_path)],
+                        logger=app_logger,
+                        print_fn_info=con.print_info,
+                        print_fn_error=con.print_error
+                    )
+
+                    con.print_success("Successfully copied ghostty configuration file.")
+        except Exception as e:
+            con.print_error(f"Failed to copy ghostty configuration file: {e}")
+
         con.print_success("Phase 2: Basic Installation completed successfully.")
 
     except Exception as e:

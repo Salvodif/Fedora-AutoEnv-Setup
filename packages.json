@@ -30,7 +30,9 @@
       "gettext",
       "sassc",
       "nodejs",
-      "npm"
+      "npm",
+      "ghostty",
+      "fish"
     ],
     "dnf_swap_ffmpeg": {
       "from": "ffmpeg-free",
@@ -49,7 +51,7 @@
       "Meslo": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/Meslo.zip"
     }
   },
-  "phase4_gnome_configuration": {
+  "phase3_gnome_configuration": {
     "dnf_packages": [
       "gnome-tweaks",
       "gnome-shell-extension-common"
@@ -106,7 +108,7 @@
       }
     }
   },
-  "phase5_nvidia_installation": {
+  "phase4_nvidia_installation": {
     "dnf_packages_standard": [
       "akmod-nvidia",
       "xorg-x11-drv-nvidia-cuda"
@@ -117,7 +119,7 @@
       "to": "akmod-nvidia-open"
     }
   },
-  "phase6_additional_packages": {
+  "phase5_additional_packages": {
     "dnf_packages": [
       "btop",
       "fastfetch",
@@ -169,11 +171,5 @@
         "icon_path": "$HOME/Applications/icons/lala.png"
       }
     }
-  },
-  "phase7_terminal_configuration": {
-    "dnf_packages": [
-      "ghostty",
-      "fish"
-    ]
   }
 }
