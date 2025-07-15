@@ -77,13 +77,6 @@
         "build_command": "make install",
         "build_handles_install": true
       },
-      "blur-my-shell": {
-        "type": "git",
-        "url": "https://github.com/aunetx/blur-my-shell.git",
-        "name": "Blur my Shell",
-        "uuid": "blur-my-shell@aunetx",
-        "build_command": "make install"
-      },
       "bluetooth-quick-connect": {
         "type": "git",
         "url": "https://github.com/bjarosze/gnome-bluetooth-quick-connect.git",
@@ -98,13 +91,40 @@
         "uuid": "clipboard-indicator@tudmotu.com",
         "build_command": ""
       },
-      "wireless-hid": {
+      "alphabetical-grid-extension": {
         "type": "git",
-        "url": "https://github.com/vchlum/wireless-hid.git",
-        "name": "Wireless HID",
-        "uuid": "wireless-hid@chlumskyvaclav.gmail.com",
-        "build_command": "make build && make install",
-        "build_handles_install": true
+        "url": "https://github.com/stuarthayhurst/alphabetical-grid-extension.git",
+        "name": "Alphabetical Grid Extension",
+        "uuid": "AlphabeticalAppGrid@stuarthayhurst",
+        "build_command": ""
+      },
+      "GNOME-Auto-Accent-Colour": {
+        "type": "git",
+        "url": "https://github.com/Wartybix/GNOME-Auto-Accent-Colour.git",
+        "name": "Auto Accent Colour",
+        "uuid": "auto-accent-colour@Wartybix",
+        "build_command": "install.sh"
+      },
+      "compiz-windows-effect": {
+        "type": "git",
+        "url": "https://github.com/hermes83/compiz-windows-effect.git",
+        "name": "Compiz windows effect for GNOME Shell",
+        "uuid": "compiz-windows-effect@hermes83.github.com",
+        "build_command": ""
+      },
+      "CoverflowAltTab": {
+        "type": "git",
+        "url": "https://github.com/dsheeler/CoverflowAltTab.git",
+        "name": "CoverflowAltTab",
+        "uuid": "CoverflowAltTab@palatis.blogspot.com",
+        "build_command": "make all"
+      },
+      "openbar": {
+        "type": "git",
+        "url": "https://github.com/neuromorph/openbar.git",
+        "name": "Open Bar (GNOME 4X Extension)",
+        "uuid": "openbar@neuromorph",
+        "build_command": ""
       }
     }
   },
