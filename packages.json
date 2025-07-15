@@ -3,10 +3,7 @@
     "dnf_packages": [
       "dnf5",
       "dnf5-plugins",
-      "flatpak",
-      "atuin",
-      "fd-find",
-      "zoxide"
+      "flatpak"
     ]
   },
   "phase2_basic_configuration": {
@@ -20,19 +17,22 @@
       "glib2-devel",
       "python3",
       "python3-pip",
-      "stow",
       "dnf-plugins-core",
       "powerline-fonts",
-      "bat",
-      "fzf",
-      "libreoffice-opensymbol-fonts",
-      "mscore-fonts-all",
       "gettext",
       "sassc",
       "nodejs",
       "npm",
       "ghostty",
-      "fish"
+      "fish",
+      "dejavu-sans-mono-fonts",
+      "atuin",
+      "fd-find",
+      "zoxide",
+      "libreoffice-opensymbol-fonts",
+      "mscore-fonts-all",
+      "bat",
+      "fzf"
     ],
     "dnf_swap_ffmpeg": {
       "from": "ffmpeg-free",
