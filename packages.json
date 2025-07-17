@@ -98,13 +98,6 @@
         "uuid": "AlphabeticalAppGrid@stuarthayhurst",
         "build_command": ""
       },
-      "GNOME-Auto-Accent-Colour": {
-        "type": "git",
-        "url": "https://github.com/Wartybix/GNOME-Auto-Accent-Colour.git",
-        "name": "Auto Accent Colour",
-        "uuid": "auto-accent-colour@Wartybix",
-        "build_command": "install.sh"
-      },
       "compiz-windows-effect": {
         "type": "git",
         "url": "https://github.com/hermes83/compiz-windows-effect.git",
