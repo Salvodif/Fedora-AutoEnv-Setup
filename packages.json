@@ -121,17 +121,6 @@
       }
     }
   },
-  "phase4_nvidia_installation": {
-    "dnf_packages_standard": [
-      "akmod-nvidia",
-      "xorg-x11-drv-nvidia-cuda"
-    ],
-    "dnf_package_tainted_repo": "rpmfusion-nonfree-release-tainted",
-    "dnf_swap_open_drivers": {
-      "from": "akmod-nvidia",
-      "to": "akmod-nvidia-open"
-    }
-  },
   "phase5_additional_packages": {
     "dnf_packages": [
       "btop",

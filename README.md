@@ -43,7 +43,6 @@ Here is a brief overview of the `packages.json` structure, which is organized by
 - **`phase1_system_preparation`**: Essential system packages and configurations.
 - **`phase2_basic_configuration`**: Core development tools, fonts, and terminal applications like `ghostty` and `fish`.
 - **`phase3_gnome_configuration`**: GNOME-specific packages, extensions, and settings.
-- **`phase4_nvidia_installation`**: NVIDIA driver packages.
 - **`phase5_additional_packages`**: Optional user applications from various sources.
 
 Each phase section can contain:
